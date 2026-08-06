@@ -1,0 +1,39 @@
+{
+  "name": "get-found",
+  "version": "0.1.0",
+  "description": "Agentic SEO in a box: crawls your site and competitors, pulls your Search Console data, and produces a ranked content-opportunity report with AI-drafted briefs.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "get-found": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "gsc:auth": "tsx scripts/gsc-auth.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "fast-xml-parser": "^5.10.1",
+    "googleapis": "^144.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

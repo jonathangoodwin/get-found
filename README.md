@@ -1,5 +1,7 @@
 # get-found
 
+[![CI](https://github.com/jonathangoodwin/get-found/actions/workflows/ci.yml/badge.svg)](https://github.com/jonathangoodwin/get-found/actions/workflows/ci.yml)
+
 Agentic SEO in a box. Point it at your domain and a few competitors; it
 crawls both, pulls your Google Search Console data, and produces a ranked
 report of:
@@ -95,7 +97,8 @@ into one opportunity instead of two.
 
 Every crawl request now times out instead of hanging, and honors a
 site's declared `robots.txt` `Crawl-delay` rather than only the CLI's
-default. Not yet implemented: a review UI, CI.
+default. CI runs typecheck, tests, and build on every push/PR to `main`.
+Not yet implemented: a review UI.
 
 ## License
 

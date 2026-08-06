@@ -18,6 +18,7 @@ core tool runs with zero API keys:
 ```
 collectors/   crawl sitemaps + Search Console — no LLM involved
 gap-engine/   pure functions: topic extraction, gap scoring, striking distance
+history/      snapshot storage (I/O) + pure run-to-run diffing
 report/       markdown report rendering
 ai/           typed BriefDrafter interface; rule-based fallback ships today,
               an LLM-backed drafter can implement the same interface later
@@ -77,6 +78,23 @@ Set `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` in `.env` (get credentials at
 endpoint) and content-gap opportunities are re-scored using real monthly
 search volume instead of the competitor-coverage-count heuristic.
 
+### Run history and "what changed"
+
+Every `run` saves a timestamped snapshot to `.get-found/history/` (one JSON
+file per run, gitignored — no database). From the second run on, the report
+gets a **Changes since last run** section: new opportunities, resolved ones,
+and score/position moves. This is the prerequisite for daily/Slack alerts
+and a dashboard — both just read this same history.
+
+```bash
+npm run dev -- run --site example.com --competitors competitor1.com
+# second run onward automatically diffs against the last saved snapshot
+```
+
+`--history-dir <path>` changes where snapshots are stored; `--no-save-history`
+diffs against prior runs without writing a new snapshot (useful in CI or for
+a dry run).
+
 ## Development
 
 ```bash
@@ -87,18 +105,18 @@ npm run build
 
 ## Status
 
-v0.3 — collectors + gap-engine spine, a working CLI, Claude-backed brief
+v0.4 — collectors + gap-engine spine, a working CLI, Claude-backed brief
 drafting (`src/ai/brief.ts`), a DataForSEO keyword-volume adapter
 (`src/collectors/dataforseo.ts`), a GSC OAuth setup script (`npm run
-gsc:auth`), 57 tests across the gap-engine and every collector (fetches
-mocked, no live network calls), and fuzzy topic matching so reworded
-headings ("Memory Care Pricing" vs. "Pricing for Memory Care") collapse
-into one opportunity instead of two.
+gsc:auth`), a file-based history/diff layer (`src/history/`), and fuzzy
+topic matching so reworded headings ("Memory Care Pricing" vs. "Pricing
+for Memory Care") collapse into one opportunity instead of two.
 
 Every crawl request now times out instead of hanging, and honors a
 site's declared `robots.txt` `Crawl-delay` rather than only the CLI's
 default. CI runs typecheck, tests, and build on every push/PR to `main`.
-Not yet implemented: a review UI.
+Not yet implemented: Slack/alerting delivery, a dashboard, and a review UI
+— all three build on the history layer above.
 
 ## License
 

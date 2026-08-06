@@ -6,6 +6,8 @@ import { crawlSite } from "./collectors/crawl.js";
 import { DataForSeoProvider, loadDataForSeoCredentialsFromEnv } from "./collectors/dataforseo.js";
 import { fetchSearchAnalytics, loadGscCredentialsFromEnv } from "./collectors/gsc.js";
 import { applyKeywordVolume, buildGapReport, computeContentGap, computeStrikingDistance } from "./gap-engine/gap.js";
+import { diffReports, type SnapshotDiff } from "./history/diff.js";
+import { DEFAULT_HISTORY_DIR, FileHistoryStore } from "./history/store.js";
 import { renderMarkdownReport } from "./report/markdown.js";
 import { ClaudeBriefDrafter, RuleBasedBriefDrafter, type BriefDrafter } from "./ai/brief.js";
 import type { ContentBrief, Opportunity } from "./types.js";
@@ -26,8 +28,12 @@ program
   .option("--briefs <n>", "draft content briefs for the top N opportunities (0 to skip)", "10")
   .option("--no-ai", "never use Claude for briefs, even if ANTHROPIC_API_KEY is set")
   .option("--business-context <text>", "one-line business context to sharpen AI-drafted briefs")
+  .option("--history-dir <path>", "where run snapshots are saved for diffing against future runs", DEFAULT_HISTORY_DIR)
+  .option("--no-save-history", "don't save this run's snapshot (still diffs against prior runs if any exist)")
   .action(async (opts) => {
     const maxPages = Number(opts.maxPages);
+    const historyStore = new FileHistoryStore(opts.historyDir);
+    const previousReport = await historyStore.loadLatest(opts.site);
     const competitorDomains: string[] = opts.competitors
       ? opts.competitors.split(",").map((d: string) => d.trim()).filter(Boolean)
       : [];
@@ -71,13 +77,18 @@ program
 
     const report = buildGapReport(opts.site, competitorDomains, [...contentGap, ...strikingDistance]);
 
+    const diff: SnapshotDiff | null = previousReport ? diffReports(previousReport, report) : null;
+    if (opts.saveHistory !== false) {
+      await historyStore.save(report);
+    }
+
     const briefLimit = Number(opts.briefs);
     const briefs = await draftBriefs(report.opportunities.slice(0, briefLimit), {
       useAi: opts.ai !== false,
       businessContext: opts.businessContext,
     });
 
-    const markdown = renderMarkdownReport(report, briefs);
+    const markdown = renderMarkdownReport(report, briefs, diff);
 
     if (opts.out) {
       await writeFile(opts.out, markdown, "utf-8");

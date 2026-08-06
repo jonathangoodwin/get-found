@@ -5,5 +5,7 @@ export * from "./collectors/gsc.js";
 export * from "./collectors/dataforseo.js";
 export * from "./gap-engine/gap.js";
 export * from "./gap-engine/topics.js";
+export * from "./history/store.js";
+export * from "./history/diff.js";
 export * from "./report/markdown.js";
 export * from "./ai/brief.js";

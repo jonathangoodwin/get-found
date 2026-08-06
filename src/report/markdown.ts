@@ -1,6 +1,11 @@
+import type { SnapshotDiff } from "../history/diff.js";
 import type { ContentBrief, GapReport, Opportunity } from "../types.js";
 
-export function renderMarkdownReport(report: GapReport, briefs?: Map<string, ContentBrief>): string {
+export function renderMarkdownReport(
+  report: GapReport,
+  briefs?: Map<string, ContentBrief>,
+  diff?: SnapshotDiff | null
+): string {
   const gapOpportunities = report.opportunities.filter((o) => o.kind === "content-gap");
   const strikingDistance = report.opportunities.filter((o) => o.kind === "striking-distance");
 
@@ -14,6 +19,13 @@ export function renderMarkdownReport(report: GapReport, briefs?: Map<string, Con
     "> quality guidance treats unreviewed AI content as a spam risk — see Search Quality Rater",
     "> Guidelines. Deterministic sections below are structural facts, not opinions.",
     "",
+  ];
+
+  if (diff) {
+    lines.push(renderDiffSection(diff), "");
+  }
+
+  lines.push(
     "## Quick wins — striking distance (page 2 queries)",
     "",
     strikingDistance.length === 0
@@ -25,8 +37,8 @@ export function renderMarkdownReport(report: GapReport, briefs?: Map<string, Con
     gapOpportunities.length === 0
       ? "_No content gaps found against the given competitor set._"
       : renderGapTable(gapOpportunities),
-    "",
-  ];
+    ""
+  );
 
   if (briefs && briefs.size > 0) {
     lines.push("## Content briefs", "");
@@ -37,6 +49,42 @@ export function renderMarkdownReport(report: GapReport, briefs?: Map<string, Con
   }
 
   return lines.join("\n");
+}
+
+function renderDiffSection(diff: SnapshotDiff): string {
+  if (diff.newOpportunities.length === 0 && diff.resolvedOpportunities.length === 0 && diff.changedOpportunities.length === 0) {
+    return "## Changes since last run\n\nNo change since the last run.";
+  }
+
+  const lines = ["## Changes since last run", ""];
+
+  if (diff.newOpportunities.length > 0) {
+    lines.push(
+      `**New (${diff.newOpportunities.length}):**`,
+      ...diff.newOpportunities.map((o) => `- ${o.topic}`),
+      ""
+    );
+  }
+  if (diff.resolvedOpportunities.length > 0) {
+    lines.push(
+      `**Resolved (${diff.resolvedOpportunities.length}):**`,
+      ...diff.resolvedOpportunities.map((o) => `- ${o.topic}`),
+      ""
+    );
+  }
+  if (diff.changedOpportunities.length > 0) {
+    lines.push(
+      `**Changed (${diff.changedOpportunities.length}):**`,
+      ...diff.changedOpportunities.map((c) => {
+        const position =
+          c.previousPosition !== c.currentPosition ? ` — position ${c.previousPosition ?? "—"} → ${c.currentPosition ?? "—"}` : "";
+        return `- ${c.topic}: score ${c.previousScore} → ${c.currentScore}${position}`;
+      }),
+      ""
+    );
+  }
+
+  return lines.join("\n").trimEnd();
 }
 
 function renderBrief(brief: ContentBrief): string {

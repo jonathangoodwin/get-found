@@ -24,13 +24,15 @@ export async function crawlSite(domain: string, opts: CrawlOptions = {}): Promis
   const delayMs = resolveCrawlDelayMs(requestedDelayMs, robots);
 
   const pages: PageRecord[] = [];
+  const failedUrls: string[] = [];
   for (const url of urls) {
     const page = await fetchPageRecord(url, domain);
     if (page) pages.push(page);
+    else failedUrls.push(url);
     if (delayMs > 0) await sleep(delayMs);
   }
 
-  return { domain, pages, crawledAt: new Date().toISOString() };
+  return { domain, pages, failedUrls, crawledAt: new Date().toISOString() };
 }
 
 /** robots.txt Crawl-delay is a floor: only slows the crawl down when it exceeds the requested delay, never speeds it up. */
@@ -62,6 +64,8 @@ export function parsePageHtml(url: string, domain: string, html: string): PageRe
   const metaDescription = $('meta[name="description"]').attr("content")?.trim() || null;
   const canonicalUrl = $('link[rel="canonical"]').attr("href")?.trim() || null;
   const hasSchema = $('script[type="application/ld+json"]').length > 0;
+  const robotsMeta = $('meta[name="robots"]').attr("content")?.toLowerCase() ?? "";
+  const isNoindex = robotsMeta.split(",").map((v) => v.trim()).includes("noindex");
 
   const h1 = collectHeadings($, "h1");
   const h2 = collectHeadings($, "h2");
@@ -81,6 +85,7 @@ export function parsePageHtml(url: string, domain: string, html: string): PageRe
     wordCount,
     canonicalUrl,
     hasSchema,
+    isNoindex,
     fetchedAt: new Date().toISOString(),
   };
 }

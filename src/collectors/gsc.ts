@@ -1,5 +1,5 @@
-import { google } from "googleapis";
-import type { GscQueryRow } from "../types.js";
+import { google, type searchconsole_v1 } from "googleapis";
+import type { GscQueryRow, SitemapStatus } from "../types.js";
 
 export interface GscCredentials {
   clientId: string;
@@ -15,6 +15,12 @@ export function loadGscCredentialsFromEnv(): GscCredentials | null {
   return { clientId, clientSecret, refreshToken };
 }
 
+function buildSearchConsoleClient(credentials: GscCredentials): searchconsole_v1.Searchconsole {
+  const oauth2Client = new google.auth.OAuth2(credentials.clientId, credentials.clientSecret);
+  oauth2Client.setCredentials({ refresh_token: credentials.refreshToken });
+  return google.searchconsole({ version: "v1", auth: oauth2Client });
+}
+
 /**
  * Fetches query/page performance rows for a verified Search Console
  * property. `siteUrl` must match the property exactly, e.g.
@@ -28,10 +34,7 @@ export async function fetchSearchAnalytics(
     endDate: defaultEndDate(),
   }
 ): Promise<GscQueryRow[]> {
-  const oauth2Client = new google.auth.OAuth2(credentials.clientId, credentials.clientSecret);
-  oauth2Client.setCredentials({ refresh_token: credentials.refreshToken });
-
-  const searchconsole = google.searchconsole({ version: "v1", auth: oauth2Client });
+  const searchconsole = buildSearchConsoleClient(credentials);
 
   const res = await searchconsole.searchanalytics.query({
     siteUrl,
@@ -54,6 +57,31 @@ export async function fetchSearchAnalytics(
       ctr: r.ctr ?? 0,
       position: r.position ?? 0,
     }));
+}
+
+/**
+ * Submitted-vs-indexed counts and errors/warnings per sitemap, from the
+ * Search Console Sitemaps API. This is the closest thing to genuine
+ * "indexing issues" Google's API actually exposes — there is no public API
+ * for the fuller Index Coverage report (soft 404s, crawl anomalies, etc.).
+ */
+export async function fetchSitemapStatus(siteUrl: string, credentials: GscCredentials): Promise<SitemapStatus[]> {
+  const searchconsole = buildSearchConsoleClient(credentials);
+  const res = await searchconsole.sitemaps.list({ siteUrl });
+  const entries = res.data.sitemap ?? [];
+
+  return entries.map((entry) => ({
+    path: entry.path ?? "",
+    lastDownloaded: entry.lastDownloaded ?? null,
+    isPending: entry.isPending ?? false,
+    warnings: Number(entry.warnings ?? 0),
+    errors: Number(entry.errors ?? 0),
+    contents: (entry.contents ?? []).map((c) => ({
+      type: c.type ?? "unknown",
+      submitted: Number(c.submitted ?? 0),
+      indexed: Number(c.indexed ?? 0),
+    })),
+  }));
 }
 
 function defaultEndDate(): string {

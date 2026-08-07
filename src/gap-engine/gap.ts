@@ -94,6 +94,38 @@ export function computeStrikingDistance(
     }));
 }
 
+export interface RankingWatchOptions {
+  /** Track the top N queries by impressions, regardless of position. */
+  limit?: number;
+}
+
+const RANKING_WATCH_DEFAULT_LIMIT = 50;
+
+/**
+ * The top N tracked queries by impressions, regardless of position —
+ * including page-1 rankings, which striking-distance deliberately excludes.
+ * These aren't "opportunities" to act on by themselves; the point is that
+ * diffReports() compares this list run-over-run using the same kind+topic
+ * matching as everything else, so a #2 ranking sliding to #8 shows up as a
+ * changedOpportunity for free, without a parallel tracking system.
+ */
+export function computeRankingWatch(rows: GscQueryRow[], opts: RankingWatchOptions = {}): Opportunity[] {
+  const limit = opts.limit ?? RANKING_WATCH_DEFAULT_LIMIT;
+
+  return [...rows]
+    .sort((a, b) => b.impressions - a.impressions)
+    .slice(0, limit)
+    .map((row) => ({
+      kind: "ranking-watch" as const,
+      topic: row.query,
+      competitorsCovering: [],
+      ownUrl: row.page,
+      currentPosition: row.position,
+      impressions: row.impressions,
+      opportunityScore: row.impressions,
+    }));
+}
+
 /**
  * Rescales content-gap scores from "number of competitors covering this
  * topic" to real monthly search volume when it's available — a stronger

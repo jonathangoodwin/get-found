@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { applyKeywordVolume, buildGapReport, computeContentGap, computeStrikingDistance } from "../src/gap-engine/gap.js";
+import {
+  applyKeywordVolume,
+  buildGapReport,
+  computeContentGap,
+  computeRankingWatch,
+  computeStrikingDistance,
+} from "../src/gap-engine/gap.js";
 import type { GscQueryRow, KeywordMetrics, Opportunity, PageRecord, SiteCrawlResult } from "../src/types.js";
 
 function page(overrides: Partial<PageRecord>): PageRecord {
@@ -14,13 +20,14 @@ function page(overrides: Partial<PageRecord>): PageRecord {
     wordCount: 500,
     canonicalUrl: null,
     hasSchema: false,
+    isNoindex: false,
     fetchedAt: "2026-08-01T00:00:00.000Z",
     ...overrides,
   };
 }
 
 function site(domain: string, pages: PageRecord[]): SiteCrawlResult {
-  return { domain, pages, crawledAt: "2026-08-01T00:00:00.000Z" };
+  return { domain, pages, failedUrls: [], crawledAt: "2026-08-01T00:00:00.000Z" };
 }
 
 describe("computeContentGap", () => {
@@ -105,6 +112,38 @@ describe("computeStrikingDistance", () => {
   it("respects custom thresholds", () => {
     const opportunities = computeStrikingDistance(rows, { minImpressions: 1000 });
     expect(opportunities).toHaveLength(0);
+  });
+});
+
+describe("computeRankingWatch", () => {
+  const rows: GscQueryRow[] = [
+    { query: "memory care near me", page: "/memory-care", clicks: 40, impressions: 5000, ctr: 0.008, position: 3 },
+    { query: "assisted living cost calculator", page: "/tools/calculator", clicks: 12, impressions: 800, ctr: 0.015, position: 14 },
+    { query: "long term care insurance payout", page: "/ltc", clicks: 0, impressions: 5, ctr: 0, position: 18 },
+  ];
+
+  it("includes page-1 queries, unlike striking distance", () => {
+    const opportunities = computeRankingWatch(rows);
+    expect(opportunities.map((o) => o.topic)).toContain("memory care near me");
+  });
+
+  it("sorts by impressions descending", () => {
+    const opportunities = computeRankingWatch(rows);
+    expect(opportunities.map((o) => o.topic)).toEqual([
+      "memory care near me",
+      "assisted living cost calculator",
+      "long term care insurance payout",
+    ]);
+  });
+
+  it("tags every entry with kind ranking-watch and score = impressions", () => {
+    const opportunities = computeRankingWatch(rows);
+    expect(opportunities.every((o) => o.kind === "ranking-watch")).toBe(true);
+    expect(opportunities[0].opportunityScore).toBe(5000);
+  });
+
+  it("respects a custom limit", () => {
+    expect(computeRankingWatch(rows, { limit: 1 })).toHaveLength(1);
   });
 });
 

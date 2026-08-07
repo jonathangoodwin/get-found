@@ -1,13 +1,20 @@
 import type { SnapshotDiff } from "../history/diff.js";
-import type { ContentBrief, GapReport, Opportunity } from "../types.js";
+import type { ContentBrief, CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../types.js";
 
-export function renderMarkdownReport(
-  report: GapReport,
-  briefs?: Map<string, ContentBrief>,
-  diff?: SnapshotDiff | null
-): string {
+export interface RenderReportOptions {
+  briefs?: Map<string, ContentBrief>;
+  diff?: SnapshotDiff | null;
+  healthFindings?: HealthFinding[];
+  sitemapStatuses?: SitemapStatus[];
+  coreWebVitals?: CoreWebVitals[];
+}
+
+export function renderMarkdownReport(report: GapReport, options: RenderReportOptions = {}): string {
+  const { briefs, diff, healthFindings, sitemapStatuses, coreWebVitals } = options;
+
   const gapOpportunities = report.opportunities.filter((o) => o.kind === "content-gap");
   const strikingDistance = report.opportunities.filter((o) => o.kind === "striking-distance");
+  const rankingWatch = report.opportunities.filter((o) => o.kind === "ranking-watch");
 
   const lines: string[] = [
     `# SEO Content Gap Report — ${report.ownDomain}`,
@@ -39,6 +46,22 @@ export function renderMarkdownReport(
       : renderGapTable(gapOpportunities),
     ""
   );
+
+  if (rankingWatch.length > 0) {
+    lines.push("## Tracked rankings", "", renderRankingWatchTable(rankingWatch), "");
+  }
+
+  if (healthFindings) {
+    lines.push(renderHealthSection(healthFindings), "");
+  }
+
+  if (sitemapStatuses) {
+    lines.push(renderSitemapSection(sitemapStatuses), "");
+  }
+
+  if (coreWebVitals) {
+    lines.push(renderCoreWebVitalsSection(coreWebVitals), "");
+  }
 
   if (briefs && briefs.size > 0) {
     lines.push("## Content briefs", "");
@@ -121,4 +144,99 @@ function renderGapTable(opportunities: Opportunity[]): string {
     (o) => `| ${o.topic} | ${o.competitorsCovering.join(", ")} | ${o.opportunityScore} |`
   );
   return [header, ...rows].join("\n");
+}
+
+function renderRankingWatchTable(opportunities: Opportunity[]): string {
+  const header = "| Query | Page | Position | Impressions |\n|---|---|---|---|";
+  const rows = opportunities.map(
+    (o) => `| ${o.topic} | ${o.ownUrl ?? ""} | ${o.currentPosition ?? ""} | ${o.impressions ?? ""} |`
+  );
+  return [header, ...rows].join("\n");
+}
+
+const MAX_FINDINGS_LISTED_PER_TYPE = 15;
+
+function renderHealthSection(findings: HealthFinding[]): string {
+  if (findings.length === 0) return "## Site health\n\nNo issues found.";
+
+  const byType = new Map<string, HealthFinding[]>();
+  for (const finding of findings) {
+    if (!byType.has(finding.type)) byType.set(finding.type, []);
+    byType.get(finding.type)!.push(finding);
+  }
+
+  const lines = ["## Site health", "", "| Issue | Count |", "|---|---|"];
+  for (const [type, items] of byType) {
+    lines.push(`| ${humanize(type)} | ${items.length} |`);
+  }
+  lines.push("");
+
+  for (const [type, items] of byType) {
+    lines.push(`**${humanize(type)}**`, "");
+    for (const item of items.slice(0, MAX_FINDINGS_LISTED_PER_TYPE)) {
+      lines.push(`- ${item.url} — ${item.detail}`);
+    }
+    if (items.length > MAX_FINDINGS_LISTED_PER_TYPE) {
+      lines.push(`- _...and ${items.length - MAX_FINDINGS_LISTED_PER_TYPE} more_`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+function renderSitemapSection(statuses: SitemapStatus[]): string {
+  if (statuses.length === 0) {
+    return "## Sitemap status\n\n_No Search Console sitemap data available._";
+  }
+
+  const lines = [
+    "## Sitemap status",
+    "",
+    "| Sitemap | Type | Submitted | Indexed | Warnings | Errors |",
+    "|---|---|---|---|---|---|",
+  ];
+  for (const sitemap of statuses) {
+    if (sitemap.contents.length === 0) {
+      lines.push(`| ${sitemap.path} | — | — | — | ${sitemap.warnings} | ${sitemap.errors} |`);
+    } else {
+      for (const content of sitemap.contents) {
+        lines.push(
+          `| ${sitemap.path} | ${content.type} | ${content.submitted} | ${content.indexed} | ${sitemap.warnings} | ${sitemap.errors} |`
+        );
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
+const CWV_THRESHOLDS = {
+  lcp: { goodMax: 2500, poorMin: 4000, unit: "ms" },
+  inp: { goodMax: 200, poorMin: 500, unit: "ms" },
+  cls: { goodMax: 0.1, poorMin: 0.25, unit: "" },
+};
+
+function renderCoreWebVitalsSection(vitals: CoreWebVitals[]): string {
+  if (vitals.length === 0) {
+    return "## Core Web Vitals\n\n_No Chrome UX Report data available (low-traffic pages don't get real-user data)._";
+  }
+
+  const lines = ["## Core Web Vitals", "", "| URL | LCP | INP | CLS |", "|---|---|---|---|"];
+  for (const v of vitals) {
+    lines.push(
+      `| ${v.url} | ${formatVital(v.lcpMs, CWV_THRESHOLDS.lcp)} | ${formatVital(v.inpMs, CWV_THRESHOLDS.inp)} | ${formatVital(v.cls, CWV_THRESHOLDS.cls)} |`
+    );
+  }
+  lines.push("", "_🟢 good · 🟡 needs improvement · 🔴 poor, per Google's Core Web Vitals thresholds._");
+  return lines.join("\n");
+}
+
+function formatVital(value: number | null, thresholds: { goodMax: number; poorMin: number; unit: string }): string {
+  if (value == null) return "—";
+  const icon = value <= thresholds.goodMax ? "🟢" : value <= thresholds.poorMin ? "🟡" : "🔴";
+  return `${icon} ${value}${thresholds.unit}`;
+}
+
+function humanize(type: string): string {
+  return type.replace(/-/g, " ");
 }

@@ -9,6 +9,12 @@ report of:
 - **New content opportunities** — topics your competitors cover that you don't.
 - **Quick wins** — your own pages ranking positions 11-30 ("striking distance")
   that need improvement rather than a new page from scratch.
+- **Tracked rankings** — your top queries by impressions, page 1 included, so a
+  ranking sliding backwards shows up even though it's not a content gap.
+- **Site health** — broken links, missing/duplicate titles and meta
+  descriptions, missing H1s, thin content, missing schema, noindex pages.
+- **Sitemap status** — submitted-vs-indexed counts and errors, from Search Console.
+- **Core Web Vitals** — real-user LCP/INP/CLS, from the Chrome UX Report.
 
 ## Design
 
@@ -16,8 +22,9 @@ The engine is a deterministic spine with an optional AI layer on top, so the
 core tool runs with zero API keys:
 
 ```
-collectors/   crawl sitemaps + Search Console — no LLM involved
-gap-engine/   pure functions: topic extraction, gap scoring, striking distance
+collectors/   crawl sitemaps + Search Console + Chrome UX Report — no LLM involved
+gap-engine/   pure functions: topic extraction, gap scoring, striking distance, ranking watch
+health/       pure structural site-health checks on already-crawled pages
 history/      snapshot storage (I/O) + pure run-to-run diffing
 report/       markdown report rendering
 ai/           typed BriefDrafter interface; rule-based fallback ships today,
@@ -78,6 +85,24 @@ Set `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` in `.env` (get credentials at
 endpoint) and content-gap opportunities are re-scored using real monthly
 search volume instead of the competitor-coverage-count heuristic.
 
+### Site health, sitemap status, tracked rankings, and Core Web Vitals
+
+Site health and tracked rankings need no configuration — they run on every
+`run` using data already crawled / already fetched from Search Console.
+`--thin-content-words <n>` (default 300) changes the thin-content floor.
+
+Sitemap status is included automatically whenever `--gsc-site-url` is set
+(same credentials as striking distance — no extra setup).
+
+Core Web Vitals needs `CRUX_API_KEY` in `.env` (free, see `.env.example` for
+where to get one). `--cwv-pages <n>` (default 5) caps how many of the own
+site's pages get checked, since the Chrome UX Report has no batch endpoint.
+
+One honest limitation: Search Console's full **Index Coverage** report
+(soft 404s, crawl anomalies, excluded-page reasons) and **Manual Actions**
+have no public API. "Site health" here means what's structurally checkable
+plus what Google's APIs actually expose — not a mirror of the GSC web UI.
+
 ### Run history and "what changed"
 
 Every `run` saves a timestamped snapshot to `.get-found/history/` (one JSON
@@ -105,18 +130,19 @@ npm run build
 
 ## Status
 
-v0.4 — collectors + gap-engine spine, a working CLI, Claude-backed brief
-drafting (`src/ai/brief.ts`), a DataForSEO keyword-volume adapter
-(`src/collectors/dataforseo.ts`), a GSC OAuth setup script (`npm run
-gsc:auth`), a file-based history/diff layer (`src/history/`), and fuzzy
-topic matching so reworded headings ("Memory Care Pricing" vs. "Pricing
-for Memory Care") collapse into one opportunity instead of two.
+v0.5 — collectors + gap-engine spine, a working CLI, Claude-backed brief
+drafting (`src/ai/brief.ts`), a DataForSEO keyword-volume adapter, a GSC
+OAuth setup script (`npm run gsc:auth`), a file-based history/diff layer
+(`src/history/`), fuzzy topic matching, and a broadened standard crawl:
+structural site-health checks (`src/health/`), GSC Sitemaps status, a
+Chrome UX Report collector for Core Web Vitals, and ranking-watch
+(page-1-inclusive rank tracking that reuses the diff engine for free).
 
 Every crawl request now times out instead of hanging, and honors a
 site's declared `robots.txt` `Crawl-delay` rather than only the CLI's
 default. CI runs typecheck, tests, and build on every push/PR to `main`.
-Not yet implemented: Slack/alerting delivery, a dashboard, and a review UI
-— all three build on the history layer above.
+Not yet implemented: Slack delivery (in progress) and a dashboard —
+both build on the history layer above.
 
 ## License
 

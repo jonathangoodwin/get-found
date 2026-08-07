@@ -3,14 +3,22 @@ import "dotenv/config";
 import { writeFile } from "node:fs/promises";
 import { Command } from "commander";
 import { crawlSite } from "./collectors/crawl.js";
+import { fetchCoreWebVitalsForUrls, loadCruxCredentialsFromEnv } from "./collectors/crux.js";
 import { DataForSeoProvider, loadDataForSeoCredentialsFromEnv } from "./collectors/dataforseo.js";
-import { fetchSearchAnalytics, loadGscCredentialsFromEnv } from "./collectors/gsc.js";
-import { applyKeywordVolume, buildGapReport, computeContentGap, computeStrikingDistance } from "./gap-engine/gap.js";
+import { fetchSearchAnalytics, fetchSitemapStatus, loadGscCredentialsFromEnv } from "./collectors/gsc.js";
+import {
+  applyKeywordVolume,
+  buildGapReport,
+  computeContentGap,
+  computeRankingWatch,
+  computeStrikingDistance,
+} from "./gap-engine/gap.js";
+import { runHealthChecks } from "./health/checks.js";
 import { diffReports, type SnapshotDiff } from "./history/diff.js";
 import { DEFAULT_HISTORY_DIR, FileHistoryStore } from "./history/store.js";
 import { renderMarkdownReport } from "./report/markdown.js";
 import { ClaudeBriefDrafter, RuleBasedBriefDrafter, type BriefDrafter } from "./ai/brief.js";
-import type { ContentBrief, Opportunity } from "./types.js";
+import type { ContentBrief, CoreWebVitals, HealthFinding, Opportunity, SitemapStatus } from "./types.js";
 
 const program = new Command();
 
@@ -30,6 +38,8 @@ program
   .option("--business-context <text>", "one-line business context to sharpen AI-drafted briefs")
   .option("--history-dir <path>", "where run snapshots are saved for diffing against future runs", DEFAULT_HISTORY_DIR)
   .option("--no-save-history", "don't save this run's snapshot (still diffs against prior runs if any exist)")
+  .option("--thin-content-words <n>", "word-count floor below which a page is flagged as thin content", "300")
+  .option("--cwv-pages <n>", "how many of the own site's pages to pull Core Web Vitals for", "5")
   .action(async (opts) => {
     const maxPages = Number(opts.maxPages);
     const historyStore = new FileHistoryStore(opts.historyDir);
@@ -47,12 +57,18 @@ program
       competitorSites.push(await crawlSite(domain, { maxPages }));
     }
 
+    const healthFindings: HealthFinding[] = runHealthChecks(ownSite, {
+      thinContentWordCount: Number(opts.thinContentWords),
+    });
+
     let strikingDistance: Opportunity[] = [];
+    let rankingWatch: Opportunity[] = [];
+    let sitemapStatuses: SitemapStatus[] = [];
     if (opts.gscSiteUrl) {
       const credentials = loadGscCredentialsFromEnv();
       if (!credentials) {
         console.error(
-          "Warning: --gsc-site-url given but GSC_CLIENT_ID/GSC_CLIENT_SECRET/GSC_REFRESH_TOKEN are not set. Skipping striking-distance analysis. See README for OAuth setup."
+          "Warning: --gsc-site-url given but GSC_CLIENT_ID/GSC_CLIENT_SECRET/GSC_REFRESH_TOKEN are not set. Skipping Search Console analysis. See README for OAuth setup."
         );
       } else {
         console.error(`Fetching Search Console data for ${opts.gscSiteUrl}...`);
@@ -61,6 +77,18 @@ program
           endDate: defaultEndDate(),
         });
         strikingDistance = computeStrikingDistance(rows);
+        rankingWatch = computeRankingWatch(rows);
+        sitemapStatuses = await fetchSitemapStatus(opts.gscSiteUrl, credentials);
+      }
+    }
+
+    let coreWebVitals: CoreWebVitals[] = [];
+    const cruxCredentials = loadCruxCredentialsFromEnv();
+    if (cruxCredentials) {
+      const cwvPages = ownSite.pages.slice(0, Number(opts.cwvPages)).map((p) => p.url);
+      if (cwvPages.length > 0) {
+        console.error(`Fetching Core Web Vitals for ${cwvPages.length} page(s)...`);
+        coreWebVitals = await fetchCoreWebVitalsForUrls(cwvPages, cruxCredentials);
       }
     }
 
@@ -75,7 +103,11 @@ program
       contentGap = applyKeywordVolume(contentGap, metricsByKeyword);
     }
 
-    const report = buildGapReport(opts.site, competitorDomains, [...contentGap, ...strikingDistance]);
+    const report = buildGapReport(opts.site, competitorDomains, [
+      ...contentGap,
+      ...strikingDistance,
+      ...rankingWatch,
+    ]);
 
     const diff: SnapshotDiff | null = previousReport ? diffReports(previousReport, report) : null;
     if (opts.saveHistory !== false) {
@@ -83,12 +115,14 @@ program
     }
 
     const briefLimit = Number(opts.briefs);
-    const briefs = await draftBriefs(report.opportunities.slice(0, briefLimit), {
+    // ranking-watch entries are visibility, not something to draft a content brief for.
+    const briefableOpportunities = report.opportunities.filter((o) => o.kind !== "ranking-watch");
+    const briefs = await draftBriefs(briefableOpportunities.slice(0, briefLimit), {
       useAi: opts.ai !== false,
       businessContext: opts.businessContext,
     });
 
-    const markdown = renderMarkdownReport(report, briefs, diff);
+    const markdown = renderMarkdownReport(report, { briefs, diff, healthFindings, sitemapStatuses, coreWebVitals });
 
     if (opts.out) {
       await writeFile(opts.out, markdown, "utf-8");

@@ -14,12 +14,15 @@ export interface PageRecord {
   wordCount: number;
   canonicalUrl: string | null;
   hasSchema: boolean;
+  isNoindex: boolean;
   fetchedAt: string; // ISO timestamp
 }
 
 export interface SiteCrawlResult {
   domain: string;
   pages: PageRecord[];
+  /** URLs found in the sitemap that failed to fetch or parse — broken links. */
+  failedUrls: string[];
   crawledAt: string;
 }
 
@@ -33,7 +36,7 @@ export interface GscQueryRow {
   position: number;
 }
 
-export type OpportunityKind = "content-gap" | "striking-distance";
+export type OpportunityKind = "content-gap" | "striking-distance" | "ranking-watch";
 
 export interface Opportunity {
   kind: OpportunityKind;
@@ -73,4 +76,40 @@ export interface ContentBrief {
   questionsToAnswer: string[];
   notes: string;
   source: "rule-based" | "ai-drafted";
+}
+
+export type HealthFindingType =
+  | "broken-link"
+  | "missing-title"
+  | "duplicate-title"
+  | "missing-meta-description"
+  | "duplicate-meta-description"
+  | "missing-h1"
+  | "multiple-h1"
+  | "thin-content"
+  | "missing-schema"
+  | "noindex";
+
+export interface HealthFinding {
+  type: HealthFindingType;
+  url: string;
+  detail: string;
+}
+
+/** One sitemap's status from the Search Console Sitemaps API. */
+export interface SitemapStatus {
+  path: string;
+  lastDownloaded: string | null;
+  isPending: boolean;
+  warnings: number;
+  errors: number;
+  contents: Array<{ type: string; submitted: number; indexed: number }>;
+}
+
+/** Real-user Core Web Vitals (75th percentile) for one URL, from the Chrome UX Report. */
+export interface CoreWebVitals {
+  url: string;
+  lcpMs: number | null;
+  inpMs: number | null;
+  cls: number | null;
 }

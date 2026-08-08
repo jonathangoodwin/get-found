@@ -1,5 +1,14 @@
 import type { SnapshotDiff } from "../history/diff.js";
-import type { ContactChannel, CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus, TrendSignal } from "../types.js";
+import type {
+  ContactChannel,
+  CoreWebVitals,
+  GapReport,
+  HealthFinding,
+  KeywordTrendSignal,
+  Opportunity,
+  SitemapStatus,
+  TrendSignal,
+} from "../types.js";
 import type { ReportSection } from "./config.js";
 
 /**
@@ -184,6 +193,29 @@ function coreWebVitalsBlocks(vitals: CoreWebVitals[]): SlackBlock[] {
   const lines = vitals.map((v) => `• ${v.url}: LCP ${v.lcpMs ?? "—"}ms · INP ${v.inpMs ?? "—"}ms · CLS ${v.cls ?? "—"}`);
 
   return [divider(), section(`*Core Web Vitals*\n${lines.join("\n")}`)];
+}
+
+/**
+ * Standalone formatter for trend-watch results — a separate pipeline from
+ * the main GapReport (no site crawl involved), posted on its own schedule
+ * rather than as a section of formatReportBlocks.
+ */
+export function formatTrendWatchBlocks(result: { checkedKeywords: string[]; signals: KeywordTrendSignal[] }): SlackBlock[] {
+  const blocks: SlackBlock[] = [
+    header("Google Trends keyword watch"),
+    context(`Checked ${result.checkedKeywords.length} keyword(s): ${result.checkedKeywords.join(", ")}`),
+  ];
+
+  if (result.signals.length === 0) {
+    blocks.push(divider(), section("No keyword cleared the spike threshold this check."));
+    return blocks;
+  }
+
+  const lines = result.signals.map(
+    (s) => `• *${s.keyword}* — ${s.baselineInterest.toFixed(0)} → ${s.recentInterest.toFixed(0)} (+${s.deltaPercent.toFixed(0)}%)`
+  );
+  blocks.push(divider(), section(`*Spiking now* (${result.signals.length})\n${lines.join("\n")}`));
+  return blocks;
 }
 
 function header(text: string): SlackBlock {

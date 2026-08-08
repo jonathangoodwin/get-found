@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatReportBlocks } from "../../src/slack/format.js";
+import { formatReportBlocks, formatTrendWatchBlocks } from "../../src/slack/format.js";
 import type { SnapshotDiff } from "../../src/history/diff.js";
 import type { ContactChannel, CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../../src/types.js";
 
@@ -218,5 +218,30 @@ describe("formatReportBlocks — trending now", () => {
       ["content-gap"]
     );
     expect(textOf(blocks)).not.toContain("Trending now");
+  });
+});
+
+describe("formatTrendWatchBlocks", () => {
+  it("headers with the checked keyword count", () => {
+    const blocks = formatTrendWatchBlocks({ checkedKeywords: ["memory care", "memory care pricing"], signals: [] });
+    expect(blocks[0]).toMatchObject({ type: "header" });
+    expect(textOf(blocks)).toContain("Google Trends keyword watch");
+    expect(textOf(blocks)).toContain("memory care, memory care pricing");
+  });
+
+  it("notes when no keyword cleared the threshold", () => {
+    const blocks = formatTrendWatchBlocks({ checkedKeywords: ["memory care"], signals: [] });
+    expect(textOf(blocks)).toContain("No keyword cleared the spike threshold");
+  });
+
+  it("lists signals with baseline, recent, and delta", () => {
+    const blocks = formatTrendWatchBlocks({
+      checkedKeywords: ["memory care"],
+      signals: [{ keyword: "memory care", baselineInterest: 10, recentInterest: 40, deltaPercent: 300, points: [] }],
+    });
+    const text = textOf(blocks);
+    expect(text).toContain("Spiking now");
+    expect(text).toContain("memory care");
+    expect(text).toContain("10 → 40 (+300%)");
   });
 });

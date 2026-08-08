@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderMarkdownReport } from "../../src/report/markdown.js";
+import { renderMarkdownReport, renderTrendWatchReport } from "../../src/report/markdown.js";
 import type { SnapshotDiff } from "../../src/history/diff.js";
 import type {
   ContactChannel,
@@ -298,5 +298,23 @@ describe("renderMarkdownReport — outreach drafts", () => {
       { outreachDrafts: drafts, contacts }
     );
     expect(markdown).toContain("**Contact:** info@senior-resources.org");
+  });
+});
+
+describe("renderTrendWatchReport", () => {
+  it("lists the checked keywords and notes when nothing cleared the threshold", () => {
+    const markdown = renderTrendWatchReport({ checkedKeywords: ["memory care", "memory care pricing"], signals: [] });
+    expect(markdown).toContain("# Google Trends keyword watch");
+    expect(markdown).toContain("Checked 2 keyword(s): memory care, memory care pricing");
+    expect(markdown).toContain("_No keyword cleared the spike threshold this check._");
+  });
+
+  it("renders a table of signals with baseline, recent, and change", () => {
+    const markdown = renderTrendWatchReport({
+      checkedKeywords: ["memory care"],
+      signals: [{ keyword: "memory care", baselineInterest: 10, recentInterest: 40, deltaPercent: 300, points: [] }],
+    });
+    expect(markdown).toContain("| Keyword | Baseline interest | Recent interest | Change |");
+    expect(markdown).toContain("| memory care | 10.0 | 40.0 | +300% |");
   });
 });

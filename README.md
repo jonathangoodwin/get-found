@@ -21,6 +21,9 @@ report of:
 - **Trending now** *(opt-in)* — this run's topics and tracked queries,
   cross-checked against Google's real-time trending searches, with a news
   link as evidence when one of yours is currently taking off.
+- **Trend watch** *(opt-in)* — user-defined keyword themes, AI-expanded
+  and checked against real Google Trends interest-over-time data on a
+  schedule you control, alerting when one spikes above its own baseline.
 
 ## Design
 
@@ -129,36 +132,53 @@ now 404) and unlinked-brand-mention detection (real, but needs a web/SERP
 search data source we haven't wired up) — both are real link-building
 tactics, deliberately out of v1 scope rather than half-built.
 
-### Trends watcher (optional, free, opt-in)
+### Trends: two different mechanisms, both opt-in
 
-There's no official Google Trends API, and the closest thing to one — the
-unofficial `interest over time` endpoint that libraries like `pytrends`
-scrape — broke in 2026: Google changed the session bootstrap it relies on
-(a cookie warm-up before a two-hop token exchange), and any real workload
-now needs proxy rotation to avoid 429s. That's not something worth building
-into a self-hosted CLI tool.
+There's no official Google Trends API. get-found has two ways of watching
+it anyway, built on different endpoints with different trade-offs — pick
+based on whether you want a passive signal on every run, or an active
+keyword watchlist on its own schedule.
 
-What *is* stable and doesn't need auth or a token dance is Google's
-real-time **Trending now** feed — the same general search trends shown at
-[trends.google.com/trending](https://trends.google.com/trending), exposed
-as a plain RSS feed. `--trends` fetches it and fuzzy-matches it (the same
-topic matching used for content gaps) against this run's own topics: its
+**Trending now** (`--trends`) fuzzy-matches this run's own topics —
 content-gap opportunities, striking-distance and tracked-ranking queries,
-plus anything you list explicitly with `--trends-topics`. A match means a
+plus anything you list with `--trends-topics` — against Google's real-time
+**Trending now** feed, the same general trends shown at
+[trends.google.com/trending](https://trends.google.com/trending), exposed
+as a plain RSS feed with no auth or token dance needed. A match means a
 topic you already care about is trending *right now*, with a news link as
-evidence for why.
+evidence. This is a **general trending-searches signal, not keyword-specific
+history** — it only fires when a broad trending search happens to overlap
+one of your topics.
 
 ```bash
 npm run dev -- run --site example.com --competitors competitor1.com \
   --trends --trends-geo US --trends-topics "extra topic, another topic"
 ```
 
-This is a **general trending-searches signal, not keyword-specific search
-history** — it surfaces a match only when a broad trending search happens
-to overlap one of your topics, not a rising/falling trend line for a
-keyword you pick. Off by default (`--trends` / Slack `config trends on`)
-since it's still an undocumented endpoint making a live request to Google
-on every run, even though it costs nothing and needs no API key.
+**Trend watch** (`get-found trends-watch`, or Slack `config trend-watch
+on`) is the opposite shape: you name specific keyword themes to track,
+Claude expands them into related search queries (a rule-based modifier list
+if no `ANTHROPIC_API_KEY` is set), and each expanded keyword gets checked
+against its actual Google Trends **interest-over-time** series — the
+`pytrends`-style endpoint that broke in 2026 when Google changed the
+session bootstrap it relies on (a cookie warm-up before a two-hop token
+exchange). We rebuilt that bootstrap and it works as of this writing, but
+it's still an undocumented endpoint and can break again without notice —
+any real workload risks 429s, which is why every keyword lookup fails soft
+(empty series, skip, move on) rather than taking down the batch. A keyword
+"signals" when its most recent window of interest is at least
+`--threshold`% above its own baseline.
+
+```bash
+npm run dev -- trends-watch --themes "memory care, assisted living" \
+  --geo US --threshold 50 --timeframe-days 90
+```
+
+The CLI command is one-shot; run it on your own cron for a recurring
+check. The Slack bot has a built-in scheduler instead —
+`config trend-watch-interval <days>` sets how often it checks
+automatically (default 7 days), and `/get-found trends-watch` runs one on
+demand. Both are opt-in and off by default.
 
 ### Site health, sitemap status, tracked rankings, and Core Web Vitals
 
@@ -228,7 +248,11 @@ delivered to a Slack channel instead of stdout.
   `link-gap` (on/off — paid DataForSEO Backlinks API + outreach drafting,
   off by default same as the CLI's `--link-gap`), `trends` (on/off — free,
   off by default same as the CLI's `--trends`), `trends-geo` (region code,
-  default `US`)
+  default `US`), `trend-watch` (on/off — the scheduled keyword watchlist),
+  `trend-watch-themes` (comma list), `trend-watch-interval` (days between
+  checks, default 7), `trend-watch-threshold` (% rise to alert on, default
+  50)
+- `trends-watch` — run a keyword-theme trend check now, outside its schedule
 - `help`
 
 One active site/channel config per bot instance — not multi-tenant. If you
@@ -253,24 +277,25 @@ npm run build
 
 ## Status
 
-v0.7 — collectors + gap-engine spine, a working CLI, Claude-backed content
+v0.8 — collectors + gap-engine spine, a working CLI, Claude-backed content
 briefs, a DataForSEO keyword-volume adapter, a GSC OAuth setup script, a
 file-based history/diff layer, fuzzy topic matching, a broadened standard
 crawl (site health, GSC Sitemaps status, Core Web Vitals, page-1-inclusive
 ranking watch), a Slack integration (`src/slack/`, Socket Mode) with
 `/run`, `/latest`, `/config`, and a configurable daily report, an opt-in
 link-gap / backlink builder (`--link-gap`) with publicly-published contact
-discovery and draft-only outreach, and an opt-in trends watcher (`--trends`)
-matching this run's topics against Google's real-time trending searches —
-all running the same shared pipeline (`src/orchestrate.ts`).
+discovery and draft-only outreach, an opt-in trends watcher (`--trends`)
+matching this run's topics against Google's real-time trending searches,
+and an opt-in, separately-scheduled trend watch (`get-found trends-watch`)
+that AI-expands user-defined keyword themes and checks each against real
+Google Trends interest-over-time data for a spike — all running the same
+shared pipeline conventions (`src/orchestrate.ts`, `src/trend-watch.ts`).
 
 Every crawl request now times out instead of hanging, and honors a
 site's declared `robots.txt` `Crawl-delay` rather than only the CLI's
 default. CI runs typecheck, tests, and build on every push/PR to `main`.
-Not yet implemented: a dashboard, broken-link building, unlinked-brand-
-mention detection, and keyword-specific trend history (the unofficial
-Google Trends endpoint for that broke in 2026 and needs proxy rotation to
-use reliably — see the Trends watcher section above).
+Not yet implemented: a dashboard, broken-link building, and unlinked-
+brand-mention detection.
 
 ## License
 

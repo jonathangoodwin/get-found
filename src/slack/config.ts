@@ -39,6 +39,17 @@ export interface SlackConfig {
   /** Opt-in: polls Google's real-time trending-searches feed against tracked topics. Off by default. */
   trendsEnabled: boolean;
   trendsGeo: string;
+  /**
+   * Trend-watch: user-defined keyword themes, expanded (Claude if available) and checked against
+   * real Google Trends interest-over-time data on a user-set interval. A different mechanism from
+   * trendsEnabled above (that one matches this run's own topics against general trending searches;
+   * this one tracks specific keywords for a spike, on their own schedule, independent of /run).
+   */
+  trendWatchEnabled: boolean;
+  trendWatchThemes: string[];
+  trendWatchIntervalDays: number;
+  trendWatchThresholdPercent: number;
+  trendWatchLastRunAt: string | null;
 }
 
 export const DEFAULT_CONFIG_PATH = ".get-found/slack-config.json";
@@ -56,6 +67,11 @@ export const DEFAULT_SLACK_CONFIG: SlackConfig = {
   linkGapEnabled: false,
   trendsEnabled: false,
   trendsGeo: "US",
+  trendWatchEnabled: false,
+  trendWatchThemes: [],
+  trendWatchIntervalDays: 7,
+  trendWatchThresholdPercent: 50,
+  trendWatchLastRunAt: null,
 };
 
 export interface ConfigStore {
@@ -152,6 +168,28 @@ export function applyConfigCommand(args: string[], config: SlackConfig): ConfigC
     case "trends-geo":
       next.trendsGeo = value || "US";
       break;
+    case "trend-watch":
+      next.trendWatchEnabled = value === "on" || value === "true";
+      break;
+    case "trend-watch-themes":
+      next.trendWatchThemes = value ? value.split(",").map((s) => s.trim()).filter(Boolean) : [];
+      break;
+    case "trend-watch-interval": {
+      const days = Number(value);
+      if (!Number.isFinite(days) || days <= 0) {
+        return { config, message: `Invalid interval "${value}" — expected a positive number of days.`, changed: false };
+      }
+      next.trendWatchIntervalDays = days;
+      break;
+    }
+    case "trend-watch-threshold": {
+      const percent = Number(value);
+      if (!Number.isFinite(percent) || percent <= 0) {
+        return { config, message: `Invalid threshold "${value}" — expected a positive percentage.`, changed: false };
+      }
+      next.trendWatchThresholdPercent = percent;
+      break;
+    }
     default:
       return {
         config,
@@ -174,6 +212,7 @@ export function describeConfig(config: SlackConfig): string {
     `*daily-sections:* ${config.dailyReportSections.join(", ")}`,
     `*link-gap:* ${config.linkGapEnabled ? "on (uses paid DataForSEO Backlinks API)" : "off"}`,
     `*trends:* ${config.trendsEnabled ? `on (geo: ${config.trendsGeo})` : "off"}`,
+    `*trend-watch:* ${config.trendWatchEnabled ? "on" : "off"} · themes: ${config.trendWatchThemes.length > 0 ? config.trendWatchThemes.join(", ") : "_none_"} · every ${config.trendWatchIntervalDays}d · threshold +${config.trendWatchThresholdPercent}%`,
   ].join("\n");
 }
 

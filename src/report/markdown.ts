@@ -5,6 +5,7 @@ import type {
   CoreWebVitals,
   GapReport,
   HealthFinding,
+  KeywordTrendSignal,
   Opportunity,
   OutreachDraft,
   SitemapStatus,
@@ -207,6 +208,34 @@ function renderOutreachDraft(draft: OutreachDraft, contact: ContactChannel | nul
   ]
     .filter((line) => line !== null)
     .join("\n");
+}
+
+/**
+ * Standalone report for `get-found trends-watch` — a different pipeline
+ * from the main SEO report (no site crawl, no GapReport), so it gets its
+ * own top-level renderer rather than a section inside renderMarkdownReport.
+ */
+export function renderTrendWatchReport(result: { checkedKeywords: string[]; signals: KeywordTrendSignal[] }): string {
+  const lines: string[] = [
+    "# Google Trends keyword watch",
+    "",
+    `Checked ${result.checkedKeywords.length} keyword(s): ${result.checkedKeywords.join(", ")}`,
+    "",
+  ];
+
+  if (result.signals.length === 0) {
+    lines.push("_No keyword cleared the spike threshold this check._");
+    return lines.join("\n");
+  }
+
+  lines.push("| Keyword | Baseline interest | Recent interest | Change |", "|---|---|---|---|");
+  for (const signal of result.signals) {
+    lines.push(
+      `| ${signal.keyword} | ${signal.baselineInterest.toFixed(1)} | ${signal.recentInterest.toFixed(1)} | +${signal.deltaPercent.toFixed(0)}% |`
+    );
+  }
+
+  return lines.join("\n");
 }
 
 function renderTrendSignals(signals: TrendSignal[]): string {

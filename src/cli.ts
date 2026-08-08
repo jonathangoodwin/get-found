@@ -4,9 +4,10 @@ import { writeFile } from "node:fs/promises";
 import { Command } from "commander";
 import { DEFAULT_HISTORY_DIR } from "./history/store.js";
 import { runAnalysis } from "./orchestrate.js";
-import { renderMarkdownReport } from "./report/markdown.js";
+import { renderMarkdownReport, renderTrendWatchReport } from "./report/markdown.js";
 import { createSlackBot } from "./slack/bot.js";
 import { DEFAULT_CONFIG_PATH, FileConfigStore } from "./slack/config.js";
+import { runTrendWatch } from "./trend-watch.js";
 
 const program = new Command();
 
@@ -77,6 +78,42 @@ program
       trendSignals: result.trendSignals,
     });
 
+    if (opts.out) {
+      await writeFile(opts.out, markdown, "utf-8");
+      console.error(`Report written to ${opts.out}`);
+    } else {
+      console.log(markdown);
+    }
+  });
+
+program
+  .command("trends-watch")
+  .description(
+    "Expand keyword themes (Claude if available) and check each against real Google Trends interest-over-time data " +
+      "for a recent spike. Undocumented endpoint, free, no API key, but fragile — see README. Run this on your own " +
+      "cron for a recurring check; the Slack bot has a built-in scheduler instead."
+  )
+  .requiredOption("--themes <themes>", "comma-separated seed keyword themes")
+  .option("--geo <code>", "region code for Google Trends", "US")
+  .option("--threshold <percent>", "minimum % rise (recent vs baseline) to count as a signal", "50")
+  .option("--timeframe-days <n>", "lookback window in days", "90")
+  .option("--no-ai", "never use Claude for keyword expansion, even if ANTHROPIC_API_KEY is set")
+  .option("--business-context <text>", "one-line business context to sharpen AI keyword expansion")
+  .option("--out <file>", "output markdown file (defaults to stdout)")
+  .action(async (opts) => {
+    const themes: string[] = opts.themes.split(",").map((t: string) => t.trim()).filter(Boolean);
+
+    const result = await runTrendWatch({
+      themes,
+      geo: opts.geo,
+      deltaThresholdPercent: Number(opts.threshold),
+      timeframeDays: Number(opts.timeframeDays),
+      useAi: opts.ai !== false,
+      businessContext: opts.businessContext,
+      onProgress: (message) => console.error(message),
+    });
+
+    const markdown = renderTrendWatchReport(result);
     if (opts.out) {
       await writeFile(opts.out, markdown, "utf-8");
       console.error(`Report written to ${opts.out}`);

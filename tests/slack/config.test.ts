@@ -120,4 +120,42 @@ describe("applyConfigCommand", () => {
     expect(applyConfigCommand(["trends-geo", "GB"], DEFAULT_SLACK_CONFIG).config.trendsGeo).toBe("GB");
     expect(applyConfigCommand(["trends-geo", ""], DEFAULT_SLACK_CONFIG).config.trendsGeo).toBe("US");
   });
+
+  it("toggles trend-watch on/off, defaulting off", () => {
+    expect(DEFAULT_SLACK_CONFIG.trendWatchEnabled).toBe(false);
+    expect(applyConfigCommand(["trend-watch", "on"], DEFAULT_SLACK_CONFIG).config.trendWatchEnabled).toBe(true);
+    expect(applyConfigCommand(["trend-watch", "off"], DEFAULT_SLACK_CONFIG).config.trendWatchEnabled).toBe(false);
+  });
+
+  it("parses a comma-separated trend-watch-themes list, trimming whitespace", () => {
+    const result = applyConfigCommand(["trend-watch-themes", "memory care, assisted living"], DEFAULT_SLACK_CONFIG);
+    expect(result.config.trendWatchThemes).toEqual(["memory care", "assisted living"]);
+  });
+
+  it("clears trend-watch-themes when given an empty value", () => {
+    const withThemes = { ...DEFAULT_SLACK_CONFIG, trendWatchThemes: ["memory care"] };
+    expect(applyConfigCommand(["trend-watch-themes", ""], withThemes).config.trendWatchThemes).toEqual([]);
+  });
+
+  it("sets trend-watch-interval, defaulting to 7 days", () => {
+    expect(DEFAULT_SLACK_CONFIG.trendWatchIntervalDays).toBe(7);
+    expect(applyConfigCommand(["trend-watch-interval", "14"], DEFAULT_SLACK_CONFIG).config.trendWatchIntervalDays).toBe(14);
+  });
+
+  it("rejects a non-positive trend-watch-interval", () => {
+    const result = applyConfigCommand(["trend-watch-interval", "0"], DEFAULT_SLACK_CONFIG);
+    expect(result.changed).toBe(false);
+    expect(result.message).toContain("Invalid interval");
+  });
+
+  it("sets trend-watch-threshold, defaulting to 50", () => {
+    expect(DEFAULT_SLACK_CONFIG.trendWatchThresholdPercent).toBe(50);
+    expect(applyConfigCommand(["trend-watch-threshold", "25"], DEFAULT_SLACK_CONFIG).config.trendWatchThresholdPercent).toBe(25);
+  });
+
+  it("rejects a non-positive trend-watch-threshold", () => {
+    const result = applyConfigCommand(["trend-watch-threshold", "-5"], DEFAULT_SLACK_CONFIG);
+    expect(result.changed).toBe(false);
+    expect(result.message).toContain("Invalid threshold");
+  });
 });

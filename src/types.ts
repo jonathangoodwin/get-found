@@ -168,3 +168,18 @@ export interface TrendSignal {
   approxTraffic: string | null;
   newsItems: TrendNewsItem[];
 }
+
+/** One point in a keyword's Google Trends interest-over-time series (0-100, relative to the series itself). */
+export interface InterestPoint {
+  date: string; // ISO date, start of the bucket
+  value: number;
+}
+
+/** A tracked keyword whose recent Google Trends interest cleared the configured spike threshold. */
+export interface KeywordTrendSignal {
+  keyword: string;
+  baselineInterest: number;
+  recentInterest: number;
+  deltaPercent: number;
+  points: InterestPoint[];
+}

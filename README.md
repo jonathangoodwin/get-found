@@ -26,7 +26,10 @@ collectors/   crawl sitemaps + Search Console + Chrome UX Report — no LLM invo
 gap-engine/   pure functions: topic extraction, gap scoring, striking distance, ranking watch
 health/       pure structural site-health checks on already-crawled pages
 history/      snapshot storage (I/O) + pure run-to-run diffing
+orchestrate/  the shared analysis pipeline — the CLI and Slack both call this
 report/       markdown report rendering
+slack/        config store, pure Block Kit formatter, run guards, daily
+              scheduler, and the Bolt (Socket Mode) wiring on top of them
 ai/           typed BriefDrafter interface; rule-based fallback ships today,
               an LLM-backed drafter can implement the same interface later
 ```
@@ -120,6 +123,50 @@ npm run dev -- run --site example.com --competitors competitor1.com
 diffs against prior runs without writing a new snapshot (useful in CI or for
 a dry run).
 
+### Slack integration
+
+Runs the exact same analysis pipeline as `run` (`src/orchestrate.ts` — one
+place decides what "run an analysis" means, whichever surface calls it),
+delivered to a Slack channel instead of stdout.
+
+**Setup:**
+
+1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps).
+2. Enable **Socket Mode** (Settings → Socket Mode) — no public server needed,
+   the bot connects out to Slack over a WebSocket. Generate an app-level
+   token with the `connections:write` scope; that's `SLACK_APP_TOKEN`.
+3. Add a slash command named `/get-found`.
+4. Under OAuth & Permissions, add the `chat:write` and `commands` bot scopes,
+   install the app to your workspace, and copy the **Bot User OAuth Token**
+   as `SLACK_BOT_TOKEN`.
+5. Add both to `.env`, then run:
+
+   ```bash
+   npm run dev -- slack
+   ```
+
+**Commands** (all under `/get-found`):
+
+- `run` — crawl and analyze the configured site now, posts results when done
+- `latest` — post the most recently *saved* report, no crawl (instant)
+- `config` — view current config; `config <key> <value>` to set `site`,
+  `competitors`, `gsc-site-url`, `channel`, `daily` (on/off), `daily-time`
+  (`HH:MM` UTC), `daily-only-on-change` (on/off), `daily-sections` (comma
+  list, see `ReportSection` in `src/slack/config.ts` for the options)
+- `help`
+
+One active site/channel config per bot instance — not multi-tenant. If you
+need several sites in Slack, run separate bot instances with different
+`--config-path`.
+
+**Guards:** overlapping `/run` commands and rapid re-triggering are blocked
+(`src/slack/guards.ts`) — cost and crawl-politeness protection, not just UX.
+
+**Daily report:** you decide what's in it. `daily-sections` controls which
+report sections appear; `daily-only-on-change` (default on) skips posting on
+days where nothing moved, so the channel doesn't fill with "no change" noise
+— set it off if you'd rather have a steady daily heartbeat regardless.
+
 ## Development
 
 ```bash
@@ -130,19 +177,20 @@ npm run build
 
 ## Status
 
-v0.5 — collectors + gap-engine spine, a working CLI, Claude-backed brief
-drafting (`src/ai/brief.ts`), a DataForSEO keyword-volume adapter, a GSC
-OAuth setup script (`npm run gsc:auth`), a file-based history/diff layer
-(`src/history/`), fuzzy topic matching, and a broadened standard crawl:
-structural site-health checks (`src/health/`), GSC Sitemaps status, a
-Chrome UX Report collector for Core Web Vitals, and ranking-watch
-(page-1-inclusive rank tracking that reuses the diff engine for free).
+v0.6 — collectors + gap-engine spine, a working CLI, Claude-backed brief
+drafting, a DataForSEO keyword-volume adapter, a GSC OAuth setup script,
+a file-based history/diff layer, fuzzy topic matching, a broadened
+standard crawl (site health, GSC Sitemaps status, Core Web Vitals,
+page-1-inclusive ranking watch), and a Slack integration (`src/slack/`,
+Socket Mode) with `/run`, `/latest`, `/config`, and a configurable daily
+report — all running the same shared pipeline (`src/orchestrate.ts`) as
+the CLI.
 
 Every crawl request now times out instead of hanging, and honors a
 site's declared `robots.txt` `Crawl-delay` rather than only the CLI's
 default. CI runs typecheck, tests, and build on every push/PR to `main`.
-Not yet implemented: Slack delivery (in progress) and a dashboard —
-both build on the history layer above.
+Not yet implemented: a dashboard, which builds on the same history layer
+as everything above.
 
 ## License
 

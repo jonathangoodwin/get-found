@@ -8,7 +8,8 @@ export type ReportSection =
   | "site-health"
   | "sitemap"
   | "core-web-vitals"
-  | "link-gap";
+  | "link-gap"
+  | "trends";
 
 export const ALL_REPORT_SECTIONS: ReportSection[] = [
   "content-gap",
@@ -18,6 +19,7 @@ export const ALL_REPORT_SECTIONS: ReportSection[] = [
   "sitemap",
   "core-web-vitals",
   "link-gap",
+  "trends",
 ];
 
 export interface SlackConfig {
@@ -34,6 +36,9 @@ export interface SlackConfig {
   dailyReportSections: ReportSection[];
   /** Opt-in: hits the paid DataForSEO Backlinks API and crawls each target for a contact channel. Off by default. */
   linkGapEnabled: boolean;
+  /** Opt-in: polls Google's real-time trending-searches feed against tracked topics. Off by default. */
+  trendsEnabled: boolean;
+  trendsGeo: string;
 }
 
 export const DEFAULT_CONFIG_PATH = ".get-found/slack-config.json";
@@ -49,6 +54,8 @@ export const DEFAULT_SLACK_CONFIG: SlackConfig = {
   dailyReportOnlyOnChange: true,
   dailyReportSections: [...ALL_REPORT_SECTIONS],
   linkGapEnabled: false,
+  trendsEnabled: false,
+  trendsGeo: "US",
 };
 
 export interface ConfigStore {
@@ -139,6 +146,12 @@ export function applyConfigCommand(args: string[], config: SlackConfig): ConfigC
     case "link-gap":
       next.linkGapEnabled = value === "on" || value === "true";
       break;
+    case "trends":
+      next.trendsEnabled = value === "on" || value === "true";
+      break;
+    case "trends-geo":
+      next.trendsGeo = value || "US";
+      break;
     default:
       return {
         config,
@@ -160,6 +173,7 @@ export function describeConfig(config: SlackConfig): string {
     `*daily-only-on-change:* ${config.dailyReportOnlyOnChange ? "on" : "off"}`,
     `*daily-sections:* ${config.dailyReportSections.join(", ")}`,
     `*link-gap:* ${config.linkGapEnabled ? "on (uses paid DataForSEO Backlinks API)" : "off"}`,
+    `*trends:* ${config.trendsEnabled ? `on (geo: ${config.trendsGeo})` : "off"}`,
   ].join("\n");
 }
 

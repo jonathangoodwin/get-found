@@ -184,3 +184,39 @@ describe("formatReportBlocks — link gap", () => {
     expect(text).not.toContain("Link building opportunities");
   });
 });
+
+describe("formatReportBlocks — trending now", () => {
+  it("omits the block when no trendSignals are passed", () => {
+    const blocks = formatReportBlocks({ report: report() });
+    expect(textOf(blocks)).not.toContain("Trending now");
+  });
+
+  it("omits the block when trendSignals is empty", () => {
+    const blocks = formatReportBlocks({ report: report(), trendSignals: [] });
+    expect(textOf(blocks)).not.toContain("Trending now");
+  });
+
+  it("lists matched topics with the trending query and traffic", () => {
+    const blocks = formatReportBlocks({
+      report: report(),
+      trendSignals: [
+        { topic: "memory care pricing", matchedQuery: "Pricing for Memory Care", approxTraffic: "2000+", newsItems: [] },
+      ],
+    });
+    const text = textOf(blocks);
+    expect(text).toContain("Trending now");
+    expect(text).toContain('memory care pricing');
+    expect(text).toContain('trending as "Pricing for Memory Care" (2000+ searches)');
+  });
+
+  it("respects the sections filter for trends", () => {
+    const blocks = formatReportBlocks(
+      {
+        report: report(),
+        trendSignals: [{ topic: "memory care pricing", matchedQuery: "memory care pricing", approxTraffic: null, newsItems: [] }],
+      },
+      ["content-gap"]
+    );
+    expect(textOf(blocks)).not.toContain("Trending now");
+  });
+});

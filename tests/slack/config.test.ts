@@ -108,4 +108,16 @@ describe("applyConfigCommand", () => {
     const result = applyConfigCommand([], withLinkGap);
     expect(result.message).toContain("paid DataForSEO Backlinks API");
   });
+
+  it("toggles trends on/off, defaulting off", () => {
+    expect(DEFAULT_SLACK_CONFIG.trendsEnabled).toBe(false);
+    expect(applyConfigCommand(["trends", "on"], DEFAULT_SLACK_CONFIG).config.trendsEnabled).toBe(true);
+    expect(applyConfigCommand(["trends", "off"], DEFAULT_SLACK_CONFIG).config.trendsEnabled).toBe(false);
+  });
+
+  it("sets trends-geo, defaulting to US", () => {
+    expect(DEFAULT_SLACK_CONFIG.trendsGeo).toBe("US");
+    expect(applyConfigCommand(["trends-geo", "GB"], DEFAULT_SLACK_CONFIG).config.trendsGeo).toBe("GB");
+    expect(applyConfigCommand(["trends-geo", ""], DEFAULT_SLACK_CONFIG).config.trendsGeo).toBe("US");
+  });
 });

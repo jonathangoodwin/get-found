@@ -18,6 +18,9 @@ report of:
 - **Link building opportunities** *(opt-in)* — domains linking to your
   competitors but not you, with a publicly-published contact channel and a
   draft outreach message for each — never sent automatically.
+- **Trending now** *(opt-in)* — this run's topics and tracked queries,
+  cross-checked against Google's real-time trending searches, with a news
+  link as evidence when one of yours is currently taking off.
 
 ## Design
 
@@ -126,6 +129,37 @@ now 404) and unlinked-brand-mention detection (real, but needs a web/SERP
 search data source we haven't wired up) — both are real link-building
 tactics, deliberately out of v1 scope rather than half-built.
 
+### Trends watcher (optional, free, opt-in)
+
+There's no official Google Trends API, and the closest thing to one — the
+unofficial `interest over time` endpoint that libraries like `pytrends`
+scrape — broke in 2026: Google changed the session bootstrap it relies on
+(a cookie warm-up before a two-hop token exchange), and any real workload
+now needs proxy rotation to avoid 429s. That's not something worth building
+into a self-hosted CLI tool.
+
+What *is* stable and doesn't need auth or a token dance is Google's
+real-time **Trending now** feed — the same general search trends shown at
+[trends.google.com/trending](https://trends.google.com/trending), exposed
+as a plain RSS feed. `--trends` fetches it and fuzzy-matches it (the same
+topic matching used for content gaps) against this run's own topics: its
+content-gap opportunities, striking-distance and tracked-ranking queries,
+plus anything you list explicitly with `--trends-topics`. A match means a
+topic you already care about is trending *right now*, with a news link as
+evidence for why.
+
+```bash
+npm run dev -- run --site example.com --competitors competitor1.com \
+  --trends --trends-geo US --trends-topics "extra topic, another topic"
+```
+
+This is a **general trending-searches signal, not keyword-specific search
+history** — it surfaces a match only when a broad trending search happens
+to overlap one of your topics, not a rising/falling trend line for a
+keyword you pick. Off by default (`--trends` / Slack `config trends on`)
+since it's still an undocumented endpoint making a live request to Google
+on every run, even though it costs nothing and needs no API key.
+
 ### Site health, sitemap status, tracked rankings, and Core Web Vitals
 
 Site health and tracked rankings need no configuration — they run on every
@@ -192,7 +226,9 @@ delivered to a Slack channel instead of stdout.
   (`HH:MM` UTC), `daily-only-on-change` (on/off), `daily-sections` (comma
   list, see `ReportSection` in `src/slack/config.ts` for the options),
   `link-gap` (on/off — paid DataForSEO Backlinks API + outreach drafting,
-  off by default same as the CLI's `--link-gap`)
+  off by default same as the CLI's `--link-gap`), `trends` (on/off — free,
+  off by default same as the CLI's `--trends`), `trends-geo` (region code,
+  default `US`)
 - `help`
 
 One active site/channel config per bot instance — not multi-tenant. If you
@@ -222,16 +258,19 @@ briefs, a DataForSEO keyword-volume adapter, a GSC OAuth setup script, a
 file-based history/diff layer, fuzzy topic matching, a broadened standard
 crawl (site health, GSC Sitemaps status, Core Web Vitals, page-1-inclusive
 ranking watch), a Slack integration (`src/slack/`, Socket Mode) with
-`/run`, `/latest`, `/config`, and a configurable daily report, and an
-opt-in link-gap / backlink builder (`--link-gap`) with publicly-published
-contact discovery and draft-only outreach — all running the same shared
-pipeline (`src/orchestrate.ts`).
+`/run`, `/latest`, `/config`, and a configurable daily report, an opt-in
+link-gap / backlink builder (`--link-gap`) with publicly-published contact
+discovery and draft-only outreach, and an opt-in trends watcher (`--trends`)
+matching this run's topics against Google's real-time trending searches —
+all running the same shared pipeline (`src/orchestrate.ts`).
 
 Every crawl request now times out instead of hanging, and honors a
 site's declared `robots.txt` `Crawl-delay` rather than only the CLI's
 default. CI runs typecheck, tests, and build on every push/PR to `main`.
-Not yet implemented: a dashboard, broken-link building, and unlinked-
-brand-mention detection.
+Not yet implemented: a dashboard, broken-link building, unlinked-brand-
+mention detection, and keyword-specific trend history (the unofficial
+Google Trends endpoint for that broke in 2026 and needs proxy rotation to
+use reliably — see the Trends watcher section above).
 
 ## License
 

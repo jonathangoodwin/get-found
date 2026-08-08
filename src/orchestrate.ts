@@ -3,6 +3,7 @@ import { fetchCoreWebVitalsForUrls, loadCruxCredentialsFromEnv } from "./collect
 import { DataForSeoProvider, fetchLinkGapDomains, loadDataForSeoCredentialsFromEnv } from "./collectors/dataforseo.js";
 import { fetchSearchAnalytics, fetchSitemapStatus, loadGscCredentialsFromEnv } from "./collectors/gsc.js";
 import { discoverContactChannel } from "./collectors/outreach-contact.js";
+import { fetchTrendingSearches } from "./collectors/trends.js";
 import {
   applyKeywordVolume,
   buildGapReport,
@@ -11,6 +12,7 @@ import {
   computeRankingWatch,
   computeStrikingDistance,
 } from "./gap-engine/gap.js";
+import { matchTrendSignals } from "./gap-engine/trends.js";
 import { runHealthChecks } from "./health/checks.js";
 import { diffReports, type SnapshotDiff } from "./history/diff.js";
 import { DEFAULT_HISTORY_DIR, FileHistoryStore } from "./history/store.js";
@@ -25,6 +27,7 @@ import type {
   Opportunity,
   OutreachDraft,
   SitemapStatus,
+  TrendSignal,
 } from "./types.js";
 
 export interface RunOptions {
@@ -43,6 +46,12 @@ export interface RunOptions {
   enableLinkGap?: boolean;
   /** How many top link-gap targets get contact discovery + an outreach draft. */
   outreachDraftLimit?: number;
+  /** Opt-in: polls Google's real-time trending-searches feed and matches it against tracked topics. Off by default. */
+  enableTrends?: boolean;
+  /** Region code for the trending-searches feed, e.g. "US". */
+  trendsGeo?: string;
+  /** Extra topics to watch for beyond this run's content-gap opportunities. */
+  trendsTopics?: string[];
   /** Called with human-readable progress lines as the run proceeds. */
   onProgress?: (message: string) => void;
 }
@@ -58,6 +67,8 @@ export interface RunResult {
   contacts: Map<string, ContactChannel>;
   /** Draft-only outreach messages, keyed by target domain — never sent automatically. */
   outreachDrafts: Map<string, OutreachDraft>;
+  /** Tracked topics currently matching a Google trending search, newest/highest-traffic first. */
+  trendSignals: TrendSignal[];
 }
 
 /**
@@ -163,6 +174,21 @@ export async function runAnalysis(opts: RunOptions): Promise<RunResult> {
     ...linkGap,
   ]);
 
+  let trendSignals: TrendSignal[] = [];
+  if (opts.enableTrends) {
+    // link-gap topics are domains, not search topics — everything else (content-gap headings,
+    // striking-distance/ranking-watch queries) is fair game to watch for a trending match.
+    const watchTopics = dedupeTopics([
+      ...report.opportunities.filter((o) => o.kind !== "link-gap").map((o) => o.topic),
+      ...(opts.trendsTopics ?? []),
+    ]);
+    if (watchTopics.length > 0) {
+      log(`Checking Google trending searches (${opts.trendsGeo ?? "US"}) against ${watchTopics.length} tracked topic(s)...`);
+      const trending = await fetchTrendingSearches(opts.trendsGeo ?? "US");
+      trendSignals = matchTrendSignals(trending, watchTopics);
+    }
+  }
+
   const diff: SnapshotDiff | null = previousReport ? diffReports(previousReport, report) : null;
   if (opts.saveHistory !== false) {
     await historyStore.save(report);
@@ -179,7 +205,11 @@ export async function runAnalysis(opts: RunOptions): Promise<RunResult> {
     log,
   });
 
-  return { report, diff, healthFindings, sitemapStatuses, coreWebVitals, briefs, contacts, outreachDrafts };
+  return { report, diff, healthFindings, sitemapStatuses, coreWebVitals, briefs, contacts, outreachDrafts, trendSignals };
+}
+
+function dedupeTopics(topics: string[]): string[] {
+  return Array.from(new Set(topics));
 }
 
 async function draftBriefs(

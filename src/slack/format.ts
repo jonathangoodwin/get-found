@@ -1,5 +1,5 @@
 import type { SnapshotDiff } from "../history/diff.js";
-import type { ContactChannel, CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../types.js";
+import type { ContactChannel, CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus, TrendSignal } from "../types.js";
 import type { ReportSection } from "./config.js";
 
 /**
@@ -20,6 +20,7 @@ export interface ReportBlocksInput {
   sitemapStatuses?: SitemapStatus[];
   coreWebVitals?: CoreWebVitals[];
   contacts?: Map<string, ContactChannel>;
+  trendSignals?: TrendSignal[];
 }
 
 const TOP_N = 5;
@@ -82,6 +83,10 @@ export function formatReportBlocks(input: ReportBlocksInput, sections?: ReportSe
     );
   }
 
+  if (include("trends") && input.trendSignals) {
+    blocks.push(...trendBlocks(input.trendSignals));
+  }
+
   if (include("site-health") && input.healthFindings) {
     blocks.push(...healthBlocks(input.healthFindings));
   }
@@ -133,6 +138,20 @@ function opportunitySectionBlocks(
   const more = remainder > 0 ? `\n_...and ${remainder} more_` : "";
 
   return [divider(), section(`*${title}* (${opportunities.length})\n${lines.join("\n")}${more}`)];
+}
+
+function trendBlocks(signals: TrendSignal[]): SlackBlock[] {
+  if (signals.length === 0) return [];
+
+  const top = signals.slice(0, TOP_N);
+  const lines = top.map((s) => {
+    const traffic = s.approxTraffic ? ` (${s.approxTraffic} searches)` : "";
+    return `• *${s.topic}* is trending as "${s.matchedQuery}"${traffic}`;
+  });
+  const remainder = signals.length - top.length;
+  const more = remainder > 0 ? `\n_...and ${remainder} more_` : "";
+
+  return [divider(), section(`*Trending now* (${signals.length})\n${lines.join("\n")}${more}`)];
 }
 
 function healthBlocks(findings: HealthFinding[]): SlackBlock[] {

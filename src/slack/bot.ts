@@ -24,7 +24,7 @@ const HELP_TEXT = [
   "• `/get-found run` — crawl and analyze the configured site now",
   "• `/get-found latest` — show the most recently saved report (no crawl)",
   "• `/get-found config` — view current configuration",
-  "• `/get-found config <key> <value>` — set `site`, `competitors`, `gsc-site-url`, `channel`, `daily`, `daily-only-on-change`, `daily-time` (HH:MM UTC), `daily-sections`, `link-gap` (on/off — paid, drafts outreach too)",
+  "• `/get-found config <key> <value>` — set `site`, `competitors`, `gsc-site-url`, `channel`, `daily`, `daily-only-on-change`, `daily-time` (HH:MM UTC), `daily-sections`, `link-gap` (on/off — paid, drafts outreach too), `trends` (on/off — free, checks Google's real-time trending searches), `trends-geo` (region code, default US)",
   "• `/get-found help` — this message",
 ].join("\n");
 
@@ -93,6 +93,8 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
         gscSiteUrl: config.gscSiteUrl ?? undefined,
         historyDir: opts.historyDir,
         enableLinkGap: config.linkGapEnabled,
+        enableTrends: config.trendsEnabled,
+        trendsGeo: config.trendsGeo,
       });
       const blocks = formatReportBlocks({
         report: result.report,
@@ -101,6 +103,7 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
         sitemapStatuses: result.sitemapStatuses,
         coreWebVitals: result.coreWebVitals,
         contacts: result.contacts,
+        trendSignals: result.trendSignals,
       });
       await postBlocks(channelId, `SEO report for ${config.site}`, blocks);
     } catch (err) {
@@ -133,6 +136,8 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
           gscSiteUrl: config.gscSiteUrl ?? undefined,
           historyDir: opts.historyDir,
           enableLinkGap: config.linkGapEnabled,
+          enableTrends: config.trendsEnabled,
+          trendsGeo: config.trendsGeo,
         });
 
         const totalChanges = result.diff
@@ -148,6 +153,7 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
             sitemapStatuses: result.sitemapStatuses,
             coreWebVitals: result.coreWebVitals,
             contacts: result.contacts,
+            trendSignals: result.trendSignals,
           },
           config.dailyReportSections
         );

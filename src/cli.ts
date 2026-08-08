@@ -33,6 +33,12 @@ program
     "find domains linking to competitors but not you (paid — hits the DataForSEO Backlinks API), and draft outreach for the top targets"
   )
   .option("--outreach-drafts <n>", "how many top link-gap targets get contact discovery + a draft outreach message", "10")
+  .option(
+    "--trends",
+    "check Google's real-time trending searches against this run's topics (undocumented endpoint, free, no API key)"
+  )
+  .option("--trends-geo <code>", "region code for the trending-searches feed", "US")
+  .option("--trends-topics <topics>", "comma-separated extra topics to watch, beyond this run's opportunities", "")
   .action(async (opts) => {
     const competitors: string[] = opts.competitors
       ? opts.competitors.split(",").map((d: string) => d.trim()).filter(Boolean)
@@ -52,6 +58,11 @@ program
       businessContext: opts.businessContext,
       enableLinkGap: Boolean(opts.linkGap),
       outreachDraftLimit: Number(opts.outreachDrafts),
+      enableTrends: Boolean(opts.trends),
+      trendsGeo: opts.trendsGeo,
+      trendsTopics: opts.trendsTopics
+        ? opts.trendsTopics.split(",").map((t: string) => t.trim()).filter(Boolean)
+        : [],
       onProgress: (message) => console.error(message),
     });
 
@@ -63,6 +74,7 @@ program
       coreWebVitals: result.coreWebVitals,
       contacts: result.contacts,
       outreachDrafts: result.outreachDrafts,
+      trendSignals: result.trendSignals,
     });
 
     if (opts.out) {

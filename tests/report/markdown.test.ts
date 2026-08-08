@@ -218,6 +218,42 @@ describe("renderMarkdownReport — link gap", () => {
   });
 });
 
+describe("renderMarkdownReport — trending now", () => {
+  it("omits the section when no trendSignals are passed", () => {
+    const markdown = renderMarkdownReport(report());
+    expect(markdown).not.toContain("## Trending now");
+  });
+
+  it("omits the section when trendSignals is an empty list", () => {
+    const markdown = renderMarkdownReport(report(), { trendSignals: [] });
+    expect(markdown).not.toContain("## Trending now");
+  });
+
+  it("renders the matched topic, trending query, and approx traffic", () => {
+    const markdown = renderMarkdownReport(report(), {
+      trendSignals: [
+        { topic: "memory care pricing", matchedQuery: "Pricing for Memory Care", approxTraffic: "2000+", newsItems: [] },
+      ],
+    });
+    expect(markdown).toContain("## Trending now");
+    expect(markdown).toContain('**memory care pricing** is trending right now as "Pricing for Memory Care" (2000+ searches)');
+  });
+
+  it("includes a linked news item as evidence when present", () => {
+    const markdown = renderMarkdownReport(report(), {
+      trendSignals: [
+        {
+          topic: "memory care pricing",
+          matchedQuery: "memory care pricing",
+          approxTraffic: null,
+          newsItems: [{ title: "Big story", url: "https://example.com/a", source: "Example News" }],
+        },
+      ],
+    });
+    expect(markdown).toContain("[Big story](https://example.com/a) (Example News)");
+  });
+});
+
 describe("renderMarkdownReport — outreach drafts", () => {
   it("omits the section when outreachDrafts is not passed", () => {
     const markdown = renderMarkdownReport(report());

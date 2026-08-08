@@ -145,3 +145,26 @@ export interface OutreachDraft {
   message: string;
   source: "rule-based" | "ai-drafted";
 }
+
+/** One news item cited as evidence for why a search is trending. */
+export interface TrendNewsItem {
+  title: string;
+  url: string;
+  source: string | null;
+}
+
+/** One entry from Google's real-time "Trending now" search feed for a region. */
+export interface TrendingSearch {
+  query: string;
+  /** Google's approximate-traffic label, e.g. "2000+" — not a precise volume. */
+  approxTraffic: string | null;
+  newsItems: TrendNewsItem[];
+}
+
+/** A tracked topic that matched a currently trending search. */
+export interface TrendSignal {
+  topic: string;
+  matchedQuery: string;
+  approxTraffic: string | null;
+  newsItems: TrendNewsItem[];
+}

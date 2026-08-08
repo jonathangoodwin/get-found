@@ -8,6 +8,7 @@ import type {
   Opportunity,
   OutreachDraft,
   SitemapStatus,
+  TrendSignal,
 } from "../types.js";
 
 export interface RenderReportOptions {
@@ -18,10 +19,11 @@ export interface RenderReportOptions {
   coreWebVitals?: CoreWebVitals[];
   contacts?: Map<string, ContactChannel>;
   outreachDrafts?: Map<string, OutreachDraft>;
+  trendSignals?: TrendSignal[];
 }
 
 export function renderMarkdownReport(report: GapReport, options: RenderReportOptions = {}): string {
-  const { briefs, diff, healthFindings, sitemapStatuses, coreWebVitals, contacts, outreachDrafts } = options;
+  const { briefs, diff, healthFindings, sitemapStatuses, coreWebVitals, contacts, outreachDrafts, trendSignals } = options;
 
   const gapOpportunities = report.opportunities.filter((o) => o.kind === "content-gap");
   const strikingDistance = report.opportunities.filter((o) => o.kind === "striking-distance");
@@ -65,6 +67,10 @@ export function renderMarkdownReport(report: GapReport, options: RenderReportOpt
 
   if (linkGap.length > 0) {
     lines.push("## Link building opportunities (backlink gap)", "", renderLinkGapTable(linkGap, contacts), "");
+  }
+
+  if (trendSignals && trendSignals.length > 0) {
+    lines.push("## Trending now", "", renderTrendSignals(trendSignals), "");
   }
 
   if (healthFindings) {
@@ -201,6 +207,16 @@ function renderOutreachDraft(draft: OutreachDraft, contact: ContactChannel | nul
   ]
     .filter((line) => line !== null)
     .join("\n");
+}
+
+function renderTrendSignals(signals: TrendSignal[]): string {
+  const lines = signals.map((s) => {
+    const traffic = s.approxTraffic ? ` (${s.approxTraffic} searches)` : "";
+    const news = s.newsItems[0];
+    const evidence = news ? ` — [${news.title}](${news.url})${news.source ? ` (${news.source})` : ""}` : "";
+    return `- **${s.topic}** is trending right now as "${s.matchedQuery}"${traffic}${evidence}`;
+  });
+  return lines.join("\n");
 }
 
 function renderRankingWatchTable(opportunities: Opportunity[]): string {

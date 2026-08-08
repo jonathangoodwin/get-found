@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DataForSeoProvider, loadDataForSeoCredentialsFromEnv } from "../../src/collectors/dataforseo.js";
+import { DataForSeoProvider, fetchLinkGapDomains, loadDataForSeoCredentialsFromEnv } from "../../src/collectors/dataforseo.js";
 
 const credentials = { login: "user", password: "pass" };
 
@@ -74,6 +74,107 @@ describe("DataForSeoProvider", () => {
     const secondBody = JSON.parse(vi.mocked(fetch).mock.calls[1][1]!.body as string);
     expect(firstBody[0].keywords).toHaveLength(1000);
     expect(secondBody[0].keywords).toHaveLength(500);
+  });
+});
+
+describe("fetchLinkGapDomains", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends ownDomain as target 1 and competitors as 2, 3, ...", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ tasks: [{ result: [{ items: [] }] }] }), { status: 200 }));
+
+    await fetchLinkGapDomains("ours.com", ["compa.com", "compb.com"], credentials, { limit: 50 });
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("https://api.dataforseo.com/v3/backlinks/domain_intersection/live");
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body[0].targets).toEqual({ "1": "ours.com", "2": "compa.com", "3": "compb.com" });
+    expect(body[0].limit).toBe(50);
+  });
+
+  it("excludes domains that already link to the own site (target 1 present)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          tasks: [
+            {
+              result: [
+                {
+                  items: [
+                    {
+                      domain_intersection: {
+                        "1": { target: "already-links-to-us.com", rank: 50 },
+                        "2": { target: "already-links-to-us.com", rank: 50 },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200 }
+      )
+    );
+
+    const results = await fetchLinkGapDomains("ours.com", ["compa.com"], credentials);
+    expect(results).toEqual([]);
+  });
+
+  it("maps a genuine gap domain, attributing which competitors it links to", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          tasks: [
+            {
+              result: [
+                {
+                  items: [
+                    {
+                      domain_intersection: {
+                        "2": { target: "senior-resources.org", rank: 250 },
+                        "3": { target: "senior-resources.org", rank: 250 },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200 }
+      )
+    );
+
+    const results = await fetchLinkGapDomains("ours.com", ["compa.com", "compb.com"], credentials);
+
+    expect(results).toEqual([{ domain: "senior-resources.org", rank: 250, competitorsLinking: ["compa.com", "compb.com"] }]);
+  });
+
+  it("caps competitor targets at 19 (20 total including the own domain)", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ tasks: [{ result: [{ items: [] }] }] }), { status: 200 }));
+
+    const manyCompetitors = Array.from({ length: 25 }, (_, i) => `comp${i}.com`);
+    await fetchLinkGapDomains("ours.com", manyCompetitors, credentials);
+
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(Object.keys(body[0].targets)).toHaveLength(20);
+  });
+
+  it("throws on a non-2xx response", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response("unauthorized", { status: 401, statusText: "Unauthorized" }));
+    await expect(fetchLinkGapDomains("ours.com", ["compa.com"], credentials)).rejects.toThrow(/401/);
+  });
+
+  it("returns an empty list when there are no intersection results", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ tasks: [{ result: [{ items: [] }] }] }), { status: 200 }));
+    expect(await fetchLinkGapDomains("ours.com", ["compa.com"], credentials)).toEqual([]);
   });
 });
 

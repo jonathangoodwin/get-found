@@ -7,7 +7,8 @@ export type ReportSection =
   | "ranking-watch"
   | "site-health"
   | "sitemap"
-  | "core-web-vitals";
+  | "core-web-vitals"
+  | "link-gap";
 
 export const ALL_REPORT_SECTIONS: ReportSection[] = [
   "content-gap",
@@ -16,6 +17,7 @@ export const ALL_REPORT_SECTIONS: ReportSection[] = [
   "site-health",
   "sitemap",
   "core-web-vitals",
+  "link-gap",
 ];
 
 export interface SlackConfig {
@@ -30,6 +32,8 @@ export interface SlackConfig {
   /** Post every day regardless, or only when something actually changed. */
   dailyReportOnlyOnChange: boolean;
   dailyReportSections: ReportSection[];
+  /** Opt-in: hits the paid DataForSEO Backlinks API and crawls each target for a contact channel. Off by default. */
+  linkGapEnabled: boolean;
 }
 
 export const DEFAULT_CONFIG_PATH = ".get-found/slack-config.json";
@@ -44,6 +48,7 @@ export const DEFAULT_SLACK_CONFIG: SlackConfig = {
   dailyReportMinuteUtc: 0,
   dailyReportOnlyOnChange: true,
   dailyReportSections: [...ALL_REPORT_SECTIONS],
+  linkGapEnabled: false,
 };
 
 export interface ConfigStore {
@@ -131,6 +136,9 @@ export function applyConfigCommand(args: string[], config: SlackConfig): ConfigC
       next.dailyReportSections = requested.length > 0 ? (requested as ReportSection[]) : [...ALL_REPORT_SECTIONS];
       break;
     }
+    case "link-gap":
+      next.linkGapEnabled = value === "on" || value === "true";
+      break;
     default:
       return {
         config,
@@ -151,6 +159,7 @@ export function describeConfig(config: SlackConfig): string {
     `*daily:* ${config.dailyReportEnabled ? "on" : "off"} at ${pad(config.dailyReportHourUtc)}:${pad(config.dailyReportMinuteUtc)} UTC`,
     `*daily-only-on-change:* ${config.dailyReportOnlyOnChange ? "on" : "off"}`,
     `*daily-sections:* ${config.dailyReportSections.join(", ")}`,
+    `*link-gap:* ${config.linkGapEnabled ? "on (uses paid DataForSEO Backlinks API)" : "off"}`,
   ].join("\n");
 }
 

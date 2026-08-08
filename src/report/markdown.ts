@@ -1,5 +1,14 @@
 import type { SnapshotDiff } from "../history/diff.js";
-import type { ContentBrief, CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../types.js";
+import type {
+  ContactChannel,
+  ContentBrief,
+  CoreWebVitals,
+  GapReport,
+  HealthFinding,
+  Opportunity,
+  OutreachDraft,
+  SitemapStatus,
+} from "../types.js";
 
 export interface RenderReportOptions {
   briefs?: Map<string, ContentBrief>;
@@ -7,14 +16,17 @@ export interface RenderReportOptions {
   healthFindings?: HealthFinding[];
   sitemapStatuses?: SitemapStatus[];
   coreWebVitals?: CoreWebVitals[];
+  contacts?: Map<string, ContactChannel>;
+  outreachDrafts?: Map<string, OutreachDraft>;
 }
 
 export function renderMarkdownReport(report: GapReport, options: RenderReportOptions = {}): string {
-  const { briefs, diff, healthFindings, sitemapStatuses, coreWebVitals } = options;
+  const { briefs, diff, healthFindings, sitemapStatuses, coreWebVitals, contacts, outreachDrafts } = options;
 
   const gapOpportunities = report.opportunities.filter((o) => o.kind === "content-gap");
   const strikingDistance = report.opportunities.filter((o) => o.kind === "striking-distance");
   const rankingWatch = report.opportunities.filter((o) => o.kind === "ranking-watch");
+  const linkGap = report.opportunities.filter((o) => o.kind === "link-gap");
 
   const lines: string[] = [
     `# SEO Content Gap Report — ${report.ownDomain}`,
@@ -51,6 +63,10 @@ export function renderMarkdownReport(report: GapReport, options: RenderReportOpt
     lines.push("## Tracked rankings", "", renderRankingWatchTable(rankingWatch), "");
   }
 
+  if (linkGap.length > 0) {
+    lines.push("## Link building opportunities (backlink gap)", "", renderLinkGapTable(linkGap, contacts), "");
+  }
+
   if (healthFindings) {
     lines.push(renderHealthSection(healthFindings), "");
   }
@@ -68,6 +84,19 @@ export function renderMarkdownReport(report: GapReport, options: RenderReportOpt
     for (const opportunity of report.opportunities) {
       const brief = briefs.get(opportunity.topic);
       if (brief) lines.push(renderBrief(brief), "");
+    }
+  }
+
+  if (outreachDrafts && outreachDrafts.size > 0) {
+    lines.push(
+      "## Outreach drafts",
+      "",
+      "> Every message below is a **draft only** — get-found never sends outreach on its own. Review, personalize, and send these yourself.",
+      ""
+    );
+    for (const opportunity of linkGap) {
+      const draft = outreachDrafts.get(opportunity.topic);
+      if (draft) lines.push(renderOutreachDraft(draft, contacts?.get(opportunity.topic) ?? null), "");
     }
   }
 
@@ -144,6 +173,34 @@ function renderGapTable(opportunities: Opportunity[]): string {
     (o) => `| ${o.topic} | ${o.competitorsCovering.join(", ")} | ${o.opportunityScore} |`
   );
   return [header, ...rows].join("\n");
+}
+
+function renderLinkGapTable(opportunities: Opportunity[], contacts?: Map<string, ContactChannel>): string {
+  const header = "| Domain | Links to competitor(s) | Contact | Score |\n|---|---|---|---|";
+  const rows = opportunities.map((o) => {
+    const contact = contacts?.get(o.topic);
+    const contactCell = contact
+      ? [contact.email, contact.contactPageUrl, ...contact.socialLinks.slice(0, 1)].filter(Boolean)[0] ?? "found"
+      : "—";
+    return `| ${o.topic} | ${o.competitorsCovering.join(", ")} | ${contactCell} | ${o.opportunityScore} |`;
+  });
+  return [header, ...rows].join("\n");
+}
+
+function renderOutreachDraft(draft: OutreachDraft, contact: ContactChannel | null): string {
+  return [
+    `### ${draft.targetDomain}`,
+    `_${draft.source === "ai-drafted" ? "AI-drafted — review before sending" : "rule-based placeholder"}_`,
+    "",
+    contact?.email ? `**Contact:** ${contact.email}` : null,
+    contact?.contactPageUrl && !contact.email ? `**Contact page:** ${contact.contactPageUrl}` : null,
+    !contact ? "**Contact:** none found — verify manually before reaching out." : null,
+    `**Subject:** ${draft.subject}`,
+    "",
+    draft.message,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
 }
 
 function renderRankingWatchTable(opportunities: Opportunity[]): string {

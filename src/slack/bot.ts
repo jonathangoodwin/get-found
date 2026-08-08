@@ -24,7 +24,7 @@ const HELP_TEXT = [
   "• `/get-found run` — crawl and analyze the configured site now",
   "• `/get-found latest` — show the most recently saved report (no crawl)",
   "• `/get-found config` — view current configuration",
-  "• `/get-found config <key> <value>` — set `site`, `competitors`, `gsc-site-url`, `channel`, `daily`, `daily-only-on-change`, `daily-time` (HH:MM UTC), `daily-sections`",
+  "• `/get-found config <key> <value>` — set `site`, `competitors`, `gsc-site-url`, `channel`, `daily`, `daily-only-on-change`, `daily-time` (HH:MM UTC), `daily-sections`, `link-gap` (on/off — paid, drafts outreach too)",
   "• `/get-found help` — this message",
 ].join("\n");
 
@@ -92,6 +92,7 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
         competitors: config.competitors,
         gscSiteUrl: config.gscSiteUrl ?? undefined,
         historyDir: opts.historyDir,
+        enableLinkGap: config.linkGapEnabled,
       });
       const blocks = formatReportBlocks({
         report: result.report,
@@ -99,6 +100,7 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
         healthFindings: result.healthFindings,
         sitemapStatuses: result.sitemapStatuses,
         coreWebVitals: result.coreWebVitals,
+        contacts: result.contacts,
       });
       await postBlocks(channelId, `SEO report for ${config.site}`, blocks);
     } catch (err) {
@@ -130,6 +132,7 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
           competitors: config.competitors,
           gscSiteUrl: config.gscSiteUrl ?? undefined,
           historyDir: opts.historyDir,
+          enableLinkGap: config.linkGapEnabled,
         });
 
         const totalChanges = result.diff
@@ -144,6 +147,7 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
             healthFindings: result.healthFindings,
             sitemapStatuses: result.sitemapStatuses,
             coreWebVitals: result.coreWebVitals,
+            contacts: result.contacts,
           },
           config.dailyReportSections
         );

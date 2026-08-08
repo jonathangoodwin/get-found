@@ -1,5 +1,5 @@
 import type { SnapshotDiff } from "../history/diff.js";
-import type { CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../types.js";
+import type { ContactChannel, CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../types.js";
 import type { ReportSection } from "./config.js";
 
 /**
@@ -19,6 +19,7 @@ export interface ReportBlocksInput {
   healthFindings?: HealthFinding[];
   sitemapStatuses?: SitemapStatus[];
   coreWebVitals?: CoreWebVitals[];
+  contacts?: Map<string, ContactChannel>;
 }
 
 const TOP_N = 5;
@@ -71,6 +72,16 @@ export function formatReportBlocks(input: ReportBlocksInput, sections?: ReportSe
     );
   }
 
+  if (include("link-gap")) {
+    blocks.push(
+      ...opportunitySectionBlocks(
+        "Link building opportunities",
+        input.report.opportunities.filter((o) => o.kind === "link-gap"),
+        input.contacts
+      )
+    );
+  }
+
   if (include("site-health") && input.healthFindings) {
     blocks.push(...healthBlocks(input.healthFindings));
   }
@@ -100,13 +111,21 @@ function diffBlocks(diff: SnapshotDiff): SlackBlock[] {
   return [divider(), section(`*Changes since last run*\n${parts.join(" · ")}`)];
 }
 
-function opportunitySectionBlocks(title: string, opportunities: Opportunity[]): SlackBlock[] {
+function opportunitySectionBlocks(
+  title: string,
+  opportunities: Opportunity[],
+  contacts?: Map<string, ContactChannel>
+): SlackBlock[] {
   if (opportunities.length === 0) return [];
 
   const top = opportunities.slice(0, TOP_N);
   const lines = top.map((o) => {
     if (o.kind === "content-gap") {
       return `• *${o.topic}* — covered by ${o.competitorsCovering.join(", ") || "competitor(s)"}`;
+    }
+    if (o.kind === "link-gap") {
+      const contactNote = contacts ? (contacts.has(o.topic) ? " · contact found" : " · no contact found") : "";
+      return `• *${o.topic}* — links to ${o.competitorsCovering.join(", ") || "competitor(s)"}${contactNote}`;
     }
     return `• *${o.topic}* — position ${o.currentPosition ?? "—"}, ${o.impressions ?? 0} impressions`;
   });

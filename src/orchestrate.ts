@@ -1,11 +1,13 @@
 import { crawlSite } from "./collectors/crawl.js";
 import { fetchCoreWebVitalsForUrls, loadCruxCredentialsFromEnv } from "./collectors/crux.js";
-import { DataForSeoProvider, loadDataForSeoCredentialsFromEnv } from "./collectors/dataforseo.js";
+import { DataForSeoProvider, fetchLinkGapDomains, loadDataForSeoCredentialsFromEnv } from "./collectors/dataforseo.js";
 import { fetchSearchAnalytics, fetchSitemapStatus, loadGscCredentialsFromEnv } from "./collectors/gsc.js";
+import { discoverContactChannel } from "./collectors/outreach-contact.js";
 import {
   applyKeywordVolume,
   buildGapReport,
   computeContentGap,
+  computeLinkGap,
   computeRankingWatch,
   computeStrikingDistance,
 } from "./gap-engine/gap.js";
@@ -13,12 +15,15 @@ import { runHealthChecks } from "./health/checks.js";
 import { diffReports, type SnapshotDiff } from "./history/diff.js";
 import { DEFAULT_HISTORY_DIR, FileHistoryStore } from "./history/store.js";
 import { ClaudeBriefDrafter, RuleBasedBriefDrafter, type BriefDrafter } from "./ai/brief.js";
+import { ClaudeOutreachDrafter, RuleBasedOutreachDrafter, type OutreachDrafter } from "./ai/outreach.js";
 import type {
+  ContactChannel,
   ContentBrief,
   CoreWebVitals,
   GapReport,
   HealthFinding,
   Opportunity,
+  OutreachDraft,
   SitemapStatus,
 } from "./types.js";
 
@@ -34,6 +39,10 @@ export interface RunOptions {
   briefsLimit?: number;
   useAi?: boolean;
   businessContext?: string;
+  /** Opt-in: hits the paid DataForSEO Backlinks API and crawls each target site for a contact channel. Off by default. */
+  enableLinkGap?: boolean;
+  /** How many top link-gap targets get contact discovery + an outreach draft. */
+  outreachDraftLimit?: number;
   /** Called with human-readable progress lines as the run proceeds. */
   onProgress?: (message: string) => void;
 }
@@ -45,6 +54,10 @@ export interface RunResult {
   sitemapStatuses: SitemapStatus[];
   coreWebVitals: CoreWebVitals[];
   briefs: Map<string, ContentBrief>;
+  /** Publicly published contact channel per link-gap target domain, keyed by domain. Only populated for the top outreachDraftLimit targets. */
+  contacts: Map<string, ContactChannel>;
+  /** Draft-only outreach messages, keyed by target domain — never sent automatically. */
+  outreachDrafts: Map<string, OutreachDraft>;
 }
 
 /**
@@ -116,7 +129,39 @@ export async function runAnalysis(opts: RunOptions): Promise<RunResult> {
     contentGap = applyKeywordVolume(contentGap, metricsByKeyword);
   }
 
-  const report = buildGapReport(opts.site, competitors, [...contentGap, ...strikingDistance, ...rankingWatch]);
+  let linkGap: Opportunity[] = [];
+  const contacts = new Map<string, ContactChannel>();
+  const outreachDrafts = new Map<string, OutreachDraft>();
+  if (opts.enableLinkGap && dataForSeoCredentials && competitors.length > 0) {
+    log(`Fetching backlink gap for ${competitors.length} competitor(s) from DataForSEO...`);
+    const gapDomains = await fetchLinkGapDomains(opts.site, competitors, dataForSeoCredentials);
+    linkGap = computeLinkGap(gapDomains);
+
+    const outreachLimit = opts.outreachDraftLimit ?? 10;
+    const outreachTargets = [...linkGap].sort((a, b) => b.opportunityScore - a.opportunityScore).slice(0, outreachLimit);
+
+    if (outreachTargets.length > 0) {
+      const outreachDrafter = buildOutreachDrafter(opts.useAi ?? true);
+      for (const target of outreachTargets) {
+        log(`Discovering contact info for ${target.topic}...`);
+        const contact = await discoverContactChannel(target.topic);
+        if (contact) contacts.set(target.topic, contact);
+
+        const draft = await draftOutreach(outreachDrafter, target, contact, {
+          ownDomain: opts.site,
+          businessContext: opts.businessContext,
+        });
+        outreachDrafts.set(target.topic, draft);
+      }
+    }
+  }
+
+  const report = buildGapReport(opts.site, competitors, [
+    ...contentGap,
+    ...strikingDistance,
+    ...rankingWatch,
+    ...linkGap,
+  ]);
 
   const diff: SnapshotDiff | null = previousReport ? diffReports(previousReport, report) : null;
   if (opts.saveHistory !== false) {
@@ -124,15 +169,17 @@ export async function runAnalysis(opts: RunOptions): Promise<RunResult> {
   }
 
   const briefLimit = opts.briefsLimit ?? 10;
-  // ranking-watch entries are visibility, not something to draft a content brief for.
-  const briefableOpportunities = report.opportunities.filter((o) => o.kind !== "ranking-watch");
+  // ranking-watch is visibility-only, and link-gap gets an outreach draft instead of a content brief.
+  const briefableOpportunities = report.opportunities.filter(
+    (o) => o.kind !== "ranking-watch" && o.kind !== "link-gap"
+  );
   const briefs = await draftBriefs(briefableOpportunities.slice(0, briefLimit), {
     useAi: opts.useAi ?? true,
     businessContext: opts.businessContext,
     log,
   });
 
-  return { report, diff, healthFindings, sitemapStatuses, coreWebVitals, briefs };
+  return { report, diff, healthFindings, sitemapStatuses, coreWebVitals, briefs, contacts, outreachDrafts };
 }
 
 async function draftBriefs(
@@ -165,6 +212,35 @@ async function draftBriefs(
     }
   }
   return briefs;
+}
+
+interface OutreachDrafterHandle {
+  primary: OutreachDrafter;
+  ruleBased: RuleBasedOutreachDrafter;
+  canUseAi: boolean;
+}
+
+function buildOutreachDrafter(useAi: boolean): OutreachDrafterHandle {
+  const ruleBased = new RuleBasedOutreachDrafter();
+  const canUseAi = useAi && Boolean(process.env.ANTHROPIC_API_KEY);
+  const primary: OutreachDrafter = canUseAi ? new ClaudeOutreachDrafter() : ruleBased;
+  return { primary, ruleBased, canUseAi };
+}
+
+async function draftOutreach(
+  drafter: OutreachDrafterHandle,
+  opportunity: Opportunity,
+  contact: ContactChannel | null,
+  context: { ownDomain: string; businessContext?: string }
+): Promise<OutreachDraft> {
+  try {
+    return await drafter.primary.draftOutreach(opportunity, contact, context);
+  } catch (err) {
+    if (drafter.canUseAi) {
+      return await drafter.ruleBased.draftOutreach(opportunity, contact, context);
+    }
+    throw err;
+  }
 }
 
 function defaultEndDate(): string {

@@ -1,8 +1,12 @@
-import type { KeywordMetrics } from "../types.js";
+import type { BacklinkDomain, KeywordMetrics } from "../types.js";
 
 const SEARCH_VOLUME_URL = "https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live";
 /** DataForSEO's Google Ads Live endpoints accept at most 1000 keywords per task. */
 const MAX_KEYWORDS_PER_REQUEST = 1000;
+
+const DOMAIN_INTERSECTION_URL = "https://api.dataforseo.com/v3/backlinks/domain_intersection/live";
+/** DataForSEO's domain_intersection endpoint accepts at most 20 domains in `targets`. */
+const MAX_INTERSECTION_TARGETS = 20;
 
 export interface DataForSeoCredentials {
   login: string;
@@ -86,6 +90,83 @@ interface DataForSeoResponse {
       search_volume?: number | null;
       competition_index?: number | null;
       cpc?: number | null;
+    }>;
+  }>;
+}
+
+export interface LinkGapOptions {
+  /** How many referring domains to retrieve, 1-1000 (DataForSEO default 100). */
+  limit?: number;
+}
+
+/**
+ * Domains that link to at least one competitor but not to the own site —
+ * DataForSEO's Domain Intersection endpoint, the same data Ahrefs/Moz-style
+ * "link gap" tools are built on. `ownDomain` goes in as target "1"; any
+ * result that already links to target "1" is filtered out client-side
+ * rather than trusted to the API's own intersection semantics, since we
+ * want "links to any competitor, not us" specifically, not "links to all
+ * targets."
+ */
+export async function fetchLinkGapDomains(
+  ownDomain: string,
+  competitorDomains: string[],
+  credentials: DataForSeoCredentials,
+  opts: LinkGapOptions = {}
+): Promise<BacklinkDomain[]> {
+  const competitors = competitorDomains.slice(0, MAX_INTERSECTION_TARGETS - 1);
+  const targets: Record<string, string> = { "1": ownDomain };
+  competitors.forEach((domain, i) => {
+    targets[String(i + 2)] = domain;
+  });
+
+  const auth = Buffer.from(`${credentials.login}:${credentials.password}`).toString("base64");
+  const res = await fetch(DOMAIN_INTERSECTION_URL, {
+    method: "POST",
+    headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    body: JSON.stringify([{ targets, limit: opts.limit ?? 100 }]),
+  });
+
+  if (!res.ok) {
+    throw new Error(`DataForSEO request failed: ${res.status} ${res.statusText}`);
+  }
+
+  const json = (await res.json()) as DomainIntersectionResponse;
+  const items = json.tasks?.[0]?.result?.[0]?.items ?? [];
+
+  const results: BacklinkDomain[] = [];
+  for (const item of items) {
+    const intersection = item.domain_intersection ?? {};
+    if (intersection["1"]) continue; // already links to us — not a gap
+
+    let referringDomain = "";
+    let rank = 0;
+    const competitorsLinking: string[] = [];
+
+    for (const [key, entry] of Object.entries(intersection)) {
+      if (!entry) continue;
+      referringDomain = entry.target ?? referringDomain;
+      rank = Math.max(rank, entry.rank ?? 0);
+      const competitorIndex = Number(key) - 2;
+      if (competitorIndex >= 0 && competitors[competitorIndex]) {
+        competitorsLinking.push(competitors[competitorIndex]);
+      }
+    }
+
+    if (referringDomain && competitorsLinking.length > 0) {
+      results.push({ domain: referringDomain, rank, competitorsLinking });
+    }
+  }
+
+  return results;
+}
+
+interface DomainIntersectionResponse {
+  tasks?: Array<{
+    result?: Array<{
+      items?: Array<{
+        domain_intersection?: Record<string, { target?: string; rank?: number } | null>;
+      }>;
     }>;
   }>;
 }

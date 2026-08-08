@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatReportBlocks } from "../../src/slack/format.js";
 import type { SnapshotDiff } from "../../src/history/diff.js";
-import type { CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../../src/types.js";
+import type { ContactChannel, CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../../src/types.js";
 
 function opportunity(overrides: Partial<Opportunity> = {}): Opportunity {
   return {
@@ -132,5 +132,55 @@ describe("formatReportBlocks", () => {
     expect(text).toContain("LCP 2100ms");
     expect(text).toContain("INP 180ms");
     expect(text).toContain("CLS 0.05");
+  });
+});
+
+describe("formatReportBlocks — link gap", () => {
+  it("lists link-gap domains with the competitors they link to", () => {
+    const blocks = formatReportBlocks({
+      report: report([opportunity({ kind: "link-gap", topic: "senior-resources.org", competitorsCovering: ["compa.com"] })]),
+    });
+    const text = textOf(blocks);
+    expect(text).toContain("Link building opportunities");
+    expect(text).toContain("senior-resources.org");
+    expect(text).toContain("links to compa.com");
+  });
+
+  it("notes when a contact was found for a target", () => {
+    const contacts = new Map<string, ContactChannel>([
+      ["senior-resources.org", { url: "https://senior-resources.org/", email: "info@senior-resources.org", contactPageUrl: null, socialLinks: [] }],
+    ]);
+    const blocks = formatReportBlocks({
+      report: report([opportunity({ kind: "link-gap", topic: "senior-resources.org" })]),
+      contacts,
+    });
+    expect(textOf(blocks)).toContain("contact found");
+  });
+
+  it("notes when no contact was found for a target", () => {
+    const blocks = formatReportBlocks({
+      report: report([opportunity({ kind: "link-gap", topic: "senior-resources.org" })]),
+      contacts: new Map(),
+    });
+    expect(textOf(blocks)).toContain("no contact found");
+  });
+
+  it("omits the contact note entirely when no contacts map is passed", () => {
+    const blocks = formatReportBlocks({
+      report: report([opportunity({ kind: "link-gap", topic: "senior-resources.org" })]),
+    });
+    const text = textOf(blocks);
+    expect(text).not.toContain("contact found");
+    expect(text).not.toContain("no contact found");
+  });
+
+  it("respects the sections filter for link-gap", () => {
+    const blocks = formatReportBlocks(
+      { report: report([opportunity({ kind: "link-gap" }), opportunity({ kind: "content-gap" })]) },
+      ["content-gap"]
+    );
+    const text = textOf(blocks);
+    expect(text).toContain("New content opportunities");
+    expect(text).not.toContain("Link building opportunities");
   });
 });

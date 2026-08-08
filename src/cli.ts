@@ -28,6 +28,11 @@ program
   .option("--no-save-history", "don't save this run's snapshot (still diffs against prior runs if any exist)")
   .option("--thin-content-words <n>", "word-count floor below which a page is flagged as thin content", "300")
   .option("--cwv-pages <n>", "how many of the own site's pages to pull Core Web Vitals for", "5")
+  .option(
+    "--link-gap",
+    "find domains linking to competitors but not you (paid — hits the DataForSEO Backlinks API), and draft outreach for the top targets"
+  )
+  .option("--outreach-drafts <n>", "how many top link-gap targets get contact discovery + a draft outreach message", "10")
   .action(async (opts) => {
     const competitors: string[] = opts.competitors
       ? opts.competitors.split(",").map((d: string) => d.trim()).filter(Boolean)
@@ -45,6 +50,8 @@ program
       briefsLimit: Number(opts.briefs),
       useAi: opts.ai !== false,
       businessContext: opts.businessContext,
+      enableLinkGap: Boolean(opts.linkGap),
+      outreachDraftLimit: Number(opts.outreachDrafts),
       onProgress: (message) => console.error(message),
     });
 
@@ -54,6 +61,8 @@ program
       healthFindings: result.healthFindings,
       sitemapStatuses: result.sitemapStatuses,
       coreWebVitals: result.coreWebVitals,
+      contacts: result.contacts,
+      outreachDrafts: result.outreachDrafts,
     });
 
     if (opts.out) {

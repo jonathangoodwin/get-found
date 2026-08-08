@@ -96,4 +96,16 @@ describe("applyConfigCommand", () => {
     expect(result.changed).toBe(false);
     expect(result.message).toContain('Unknown config key "bogus-key"');
   });
+
+  it("toggles link-gap on/off, defaulting off", () => {
+    expect(DEFAULT_SLACK_CONFIG.linkGapEnabled).toBe(false);
+    expect(applyConfigCommand(["link-gap", "on"], DEFAULT_SLACK_CONFIG).config.linkGapEnabled).toBe(true);
+    expect(applyConfigCommand(["link-gap", "off"], DEFAULT_SLACK_CONFIG).config.linkGapEnabled).toBe(false);
+  });
+
+  it("notes the paid API in the description when link-gap is on", () => {
+    const withLinkGap = { ...DEFAULT_SLACK_CONFIG, linkGapEnabled: true };
+    const result = applyConfigCommand([], withLinkGap);
+    expect(result.message).toContain("paid DataForSEO Backlinks API");
+  });
 });

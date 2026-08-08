@@ -3,10 +3,11 @@ import {
   applyKeywordVolume,
   buildGapReport,
   computeContentGap,
+  computeLinkGap,
   computeRankingWatch,
   computeStrikingDistance,
 } from "../src/gap-engine/gap.js";
-import type { GscQueryRow, KeywordMetrics, Opportunity, PageRecord, SiteCrawlResult } from "../src/types.js";
+import type { BacklinkDomain, GscQueryRow, KeywordMetrics, Opportunity, PageRecord, SiteCrawlResult } from "../src/types.js";
 
 function page(overrides: Partial<PageRecord>): PageRecord {
   return {
@@ -82,6 +83,33 @@ describe("computeContentGap", () => {
     const competitor = site("comp.com", [page({ domain: "comp.com", h2: ["Memory Care Costs"] })]);
 
     expect(computeContentGap(own, [competitor])).toHaveLength(0);
+  });
+});
+
+describe("computeLinkGap", () => {
+  function backlinkDomain(overrides: Partial<BacklinkDomain> = {}): BacklinkDomain {
+    return { domain: "senior-resources.org", rank: 250, competitorsLinking: ["compa.com"], ...overrides };
+  }
+
+  it("maps a BacklinkDomain into a link-gap Opportunity", () => {
+    const [opportunity] = computeLinkGap([backlinkDomain()]);
+    expect(opportunity.kind).toBe("link-gap");
+    expect(opportunity.topic).toBe("senior-resources.org");
+    expect(opportunity.competitorsCovering).toEqual(["compa.com"]);
+  });
+
+  it("scores by competitor count times domain rank", () => {
+    const [opportunity] = computeLinkGap([backlinkDomain({ rank: 100, competitorsLinking: ["a.com", "b.com"] })]);
+    expect(opportunity.opportunityScore).toBe(200);
+  });
+
+  it("floors the rank at 1 so a zero-rank domain doesn't zero out the score", () => {
+    const [opportunity] = computeLinkGap([backlinkDomain({ rank: 0, competitorsLinking: ["a.com", "b.com"] })]);
+    expect(opportunity.opportunityScore).toBe(2);
+  });
+
+  it("returns an empty list for no domains", () => {
+    expect(computeLinkGap([])).toEqual([]);
   });
 });
 

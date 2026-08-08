@@ -36,7 +36,7 @@ export interface GscQueryRow {
   position: number;
 }
 
-export type OpportunityKind = "content-gap" | "striking-distance" | "ranking-watch";
+export type OpportunityKind = "content-gap" | "striking-distance" | "ranking-watch" | "link-gap";
 
 export interface Opportunity {
   kind: OpportunityKind;
@@ -112,4 +112,36 @@ export interface CoreWebVitals {
   lcpMs: number | null;
   inpMs: number | null;
   cls: number | null;
+}
+
+/** A domain that links to at least one competitor but not to the own site — a link-gap candidate. */
+export interface BacklinkDomain {
+  domain: string;
+  /** DataForSEO's domain authority estimate (0-1000 scale). */
+  rank: number;
+  competitorsLinking: string[];
+}
+
+/**
+ * Publicly published contact info discovered on a target's own site — never
+ * guessed or invented. `email`/`contactPageUrl`/`socialLinks` are only ever
+ * populated from links the site itself chose to publish.
+ */
+export interface ContactChannel {
+  url: string;
+  email: string | null;
+  contactPageUrl: string | null;
+  socialLinks: string[];
+}
+
+/**
+ * A drafted outreach message for a human to review and send themselves —
+ * this tool never sends outreach on its own. `source` is labeled the same
+ * way as ContentBrief for the same reason: AI output needs a human in the loop.
+ */
+export interface OutreachDraft {
+  targetDomain: string;
+  subject: string;
+  message: string;
+  source: "rule-based" | "ai-drafted";
 }

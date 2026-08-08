@@ -15,6 +15,9 @@ report of:
   descriptions, missing H1s, thin content, missing schema, noindex pages.
 - **Sitemap status** — submitted-vs-indexed counts and errors, from Search Console.
 - **Core Web Vitals** — real-user LCP/INP/CLS, from the Chrome UX Report.
+- **Link building opportunities** *(opt-in)* — domains linking to your
+  competitors but not you, with a publicly-published contact channel and a
+  draft outreach message for each — never sent automatically.
 
 ## Design
 
@@ -30,8 +33,9 @@ orchestrate/  the shared analysis pipeline — the CLI and Slack both call this
 report/       markdown report rendering
 slack/        config store, pure Block Kit formatter, run guards, daily
               scheduler, and the Bolt (Socket Mode) wiring on top of them
-ai/           typed BriefDrafter interface; rule-based fallback ships today,
-              an LLM-backed drafter can implement the same interface later
+ai/           typed BriefDrafter + OutreachDrafter interfaces; rule-based
+              fallbacks ship today, LLM-backed drafters implement the same
+              interfaces — every output is draft-only, human reviews before use
 ```
 
 Every AI-drafted output is labeled `source: "ai-drafted"` and is meant to be
@@ -87,6 +91,40 @@ Set `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` in `.env` (get credentials at
 [dataforseo.com](https://dataforseo.com), ~$0.002/keyword on the Live
 endpoint) and content-gap opportunities are re-scored using real monthly
 search volume instead of the competitor-coverage-count heuristic.
+
+### Link building / backlink gap (optional, paid, opt-in)
+
+Domains that link to at least one competitor but not to you — the same
+[DataForSEO](https://dataforseo.com) credentials as keyword volume power
+this via the Backlinks API's Domain Intersection endpoint, a **separate,
+additional cost** from keyword lookups. Off by default; pass `--link-gap`
+to enable it.
+
+```bash
+npm run dev -- run --site example.com --competitors competitor1.com \
+  --link-gap --outreach-drafts 10
+```
+
+For the top targets (`--outreach-drafts`, default 10), get-found also:
+
+1. Crawls the target's own site for a **publicly published** contact
+   channel — a `mailto:` link, a linked contact page, a social profile.
+   It never guesses or invents an email address; if the site hasn't
+   published one, you get "no contact found," not a fabricated one.
+2. Drafts a personalized outreach message (Claude if `ANTHROPIC_API_KEY`
+   is set, a rule-based placeholder otherwise) explaining why a link would
+   help *their* audience, not just why it helps you.
+
+**get-found never sends outreach.** Every draft is labeled and printed for
+you to review, personalize further, and send yourself. This is a hard
+design boundary, not a v1 limitation to be lifted later — the alternative
+(an agent auto-emailing a list of webmasters) is a spam pipeline, not an
+outreach tool.
+
+Not built: broken-link building (competitor pages that earned links and
+now 404) and unlinked-brand-mention detection (real, but needs a web/SERP
+search data source we haven't wired up) — both are real link-building
+tactics, deliberately out of v1 scope rather than half-built.
 
 ### Site health, sitemap status, tracked rankings, and Core Web Vitals
 
@@ -152,7 +190,9 @@ delivered to a Slack channel instead of stdout.
 - `config` — view current config; `config <key> <value>` to set `site`,
   `competitors`, `gsc-site-url`, `channel`, `daily` (on/off), `daily-time`
   (`HH:MM` UTC), `daily-only-on-change` (on/off), `daily-sections` (comma
-  list, see `ReportSection` in `src/slack/config.ts` for the options)
+  list, see `ReportSection` in `src/slack/config.ts` for the options),
+  `link-gap` (on/off — paid DataForSEO Backlinks API + outreach drafting,
+  off by default same as the CLI's `--link-gap`)
 - `help`
 
 One active site/channel config per bot instance — not multi-tenant. If you
@@ -177,20 +217,21 @@ npm run build
 
 ## Status
 
-v0.6 — collectors + gap-engine spine, a working CLI, Claude-backed brief
-drafting, a DataForSEO keyword-volume adapter, a GSC OAuth setup script,
-a file-based history/diff layer, fuzzy topic matching, a broadened
-standard crawl (site health, GSC Sitemaps status, Core Web Vitals,
-page-1-inclusive ranking watch), and a Slack integration (`src/slack/`,
-Socket Mode) with `/run`, `/latest`, `/config`, and a configurable daily
-report — all running the same shared pipeline (`src/orchestrate.ts`) as
-the CLI.
+v0.7 — collectors + gap-engine spine, a working CLI, Claude-backed content
+briefs, a DataForSEO keyword-volume adapter, a GSC OAuth setup script, a
+file-based history/diff layer, fuzzy topic matching, a broadened standard
+crawl (site health, GSC Sitemaps status, Core Web Vitals, page-1-inclusive
+ranking watch), a Slack integration (`src/slack/`, Socket Mode) with
+`/run`, `/latest`, `/config`, and a configurable daily report, and an
+opt-in link-gap / backlink builder (`--link-gap`) with publicly-published
+contact discovery and draft-only outreach — all running the same shared
+pipeline (`src/orchestrate.ts`).
 
 Every crawl request now times out instead of hanging, and honors a
 site's declared `robots.txt` `Crawl-delay` rather than only the CLI's
 default. CI runs typecheck, tests, and build on every push/PR to `main`.
-Not yet implemented: a dashboard, which builds on the same history layer
-as everything above.
+Not yet implemented: a dashboard, broken-link building, and unlinked-
+brand-mention detection.
 
 ## License
 

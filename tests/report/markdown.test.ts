@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { renderMarkdownReport } from "../../src/report/markdown.js";
 import type { SnapshotDiff } from "../../src/history/diff.js";
-import type { CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../../src/types.js";
+import type {
+  ContactChannel,
+  CoreWebVitals,
+  GapReport,
+  HealthFinding,
+  Opportunity,
+  OutreachDraft,
+  SitemapStatus,
+} from "../../src/types.js";
 
 function opportunity(overrides: Partial<Opportunity> = {}): Opportunity {
   return {
@@ -170,5 +178,89 @@ describe("renderMarkdownReport — Core Web Vitals", () => {
     const vitals: CoreWebVitals[] = [{ url: "https://ours.com/", lcpMs: null, inpMs: null, cls: null }];
     const markdown = renderMarkdownReport(report(), { coreWebVitals: vitals });
     expect(markdown).toContain("| https://ours.com/ | — | — | — |");
+  });
+});
+
+describe("renderMarkdownReport — link gap", () => {
+  it("omits the section when there are no link-gap opportunities", () => {
+    const markdown = renderMarkdownReport(report());
+    expect(markdown).not.toContain("Link building opportunities");
+  });
+
+  it("renders a table of link-gap domains with covering competitors and score", () => {
+    const markdown = renderMarkdownReport(
+      report([
+        opportunity({ kind: "link-gap", topic: "senior-resources.org", competitorsCovering: ["compa.com", "compb.com"], opportunityScore: 500 }),
+      ])
+    );
+    expect(markdown).toContain("## Link building opportunities (backlink gap)");
+    expect(markdown).toContain("senior-resources.org | compa.com, compb.com");
+    expect(markdown).toContain("500");
+  });
+
+  it("shows the discovered contact when a contacts map is passed", () => {
+    const contacts = new Map<string, ContactChannel>([
+      ["senior-resources.org", { url: "https://senior-resources.org/", email: "info@senior-resources.org", contactPageUrl: null, socialLinks: [] }],
+    ]);
+    const markdown = renderMarkdownReport(
+      report([opportunity({ kind: "link-gap", topic: "senior-resources.org" })]),
+      { contacts }
+    );
+    expect(markdown).toContain("info@senior-resources.org");
+  });
+
+  it("shows an em-dash when no contact was found for a target", () => {
+    const markdown = renderMarkdownReport(
+      report([opportunity({ kind: "link-gap", topic: "senior-resources.org" })]),
+      { contacts: new Map() }
+    );
+    expect(markdown).toContain("senior-resources.org | comp.com | — |");
+  });
+});
+
+describe("renderMarkdownReport — outreach drafts", () => {
+  it("omits the section when outreachDrafts is not passed", () => {
+    const markdown = renderMarkdownReport(report());
+    expect(markdown).not.toContain("## Outreach drafts");
+  });
+
+  it("includes the never-auto-sent disclaimer", () => {
+    const drafts = new Map<string, OutreachDraft>([
+      ["senior-resources.org", { targetDomain: "senior-resources.org", subject: "Link opportunity", message: "Hi there", source: "ai-drafted" }],
+    ]);
+    const markdown = renderMarkdownReport(
+      report([opportunity({ kind: "link-gap", topic: "senior-resources.org" })]),
+      { outreachDrafts: drafts }
+    );
+    expect(markdown).toContain("get-found never sends outreach on its own");
+  });
+
+  it("renders the draft subject and message, and notes when no contact was found", () => {
+    const drafts = new Map<string, OutreachDraft>([
+      ["senior-resources.org", { targetDomain: "senior-resources.org", subject: "Link opportunity", message: "Hi there", source: "ai-drafted" }],
+    ]);
+    const markdown = renderMarkdownReport(
+      report([opportunity({ kind: "link-gap", topic: "senior-resources.org" })]),
+      { outreachDrafts: drafts, contacts: new Map() }
+    );
+    expect(markdown).toContain("### senior-resources.org");
+    expect(markdown).toContain("AI-drafted — review before sending");
+    expect(markdown).toContain("**Subject:** Link opportunity");
+    expect(markdown).toContain("Hi there");
+    expect(markdown).toContain("none found — verify manually");
+  });
+
+  it("shows the contact email when one was found", () => {
+    const drafts = new Map<string, OutreachDraft>([
+      ["senior-resources.org", { targetDomain: "senior-resources.org", subject: "s", message: "m", source: "rule-based" }],
+    ]);
+    const contacts = new Map<string, ContactChannel>([
+      ["senior-resources.org", { url: "https://senior-resources.org/", email: "info@senior-resources.org", contactPageUrl: null, socialLinks: [] }],
+    ]);
+    const markdown = renderMarkdownReport(
+      report([opportunity({ kind: "link-gap", topic: "senior-resources.org" })]),
+      { outreachDrafts: drafts, contacts }
+    );
+    expect(markdown).toContain("**Contact:** info@senior-resources.org");
   });
 });

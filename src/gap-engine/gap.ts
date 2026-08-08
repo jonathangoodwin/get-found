@@ -1,4 +1,4 @@
-import type { GapReport, GscQueryRow, KeywordMetrics, Opportunity, SiteCrawlResult } from "../types.js";
+import type { BacklinkDomain, GapReport, GscQueryRow, KeywordMetrics, Opportunity, SiteCrawlResult } from "../types.js";
 import { canonicalizeTopic, extractPageTopics } from "./topics.js";
 
 export interface StrikingDistanceOptions {
@@ -62,6 +62,25 @@ export function computeContentGap(
     });
   }
   return opportunities;
+}
+
+/**
+ * Domains that link to at least one competitor but not to the own site —
+ * the backlink analog of computeContentGap, same "competitors have it, we
+ * don't" shape, scored by how many competitors link there and the domain's
+ * authority. `topic` carries the referring domain name here, same as it
+ * carries a heading phrase for content-gap.
+ */
+export function computeLinkGap(domains: BacklinkDomain[]): Opportunity[] {
+  return domains.map((domain) => ({
+    kind: "link-gap" as const,
+    topic: domain.domain,
+    competitorsCovering: domain.competitorsLinking,
+    ownUrl: null,
+    currentPosition: null,
+    impressions: null,
+    opportunityScore: domain.competitorsLinking.length * Math.max(domain.rank, 1),
+  }));
 }
 
 /**

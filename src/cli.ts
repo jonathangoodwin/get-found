@@ -120,6 +120,14 @@ program
     } else {
       console.log(markdown);
     }
+
+    if (!result.endpointHealthy) {
+      console.error(
+        `\nWarning: the Google Trends endpoint appears broken (${result.failedKeywordCount}/${result.checkedKeywords.length} lookups failed). ` +
+          "Exiting with a non-zero status so a cron wrapper can alert on it."
+      );
+      process.exitCode = 1;
+    }
   });
 
 program

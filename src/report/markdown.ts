@@ -215,13 +215,23 @@ function renderOutreachDraft(draft: OutreachDraft, contact: ContactChannel | nul
  * from the main SEO report (no site crawl, no GapReport), so it gets its
  * own top-level renderer rather than a section inside renderMarkdownReport.
  */
-export function renderTrendWatchReport(result: { checkedKeywords: string[]; signals: KeywordTrendSignal[] }): string {
-  const lines: string[] = [
-    "# Google Trends keyword watch",
-    "",
-    `Checked ${result.checkedKeywords.length} keyword(s): ${result.checkedKeywords.join(", ")}`,
-    "",
-  ];
+export function renderTrendWatchReport(result: {
+  checkedKeywords: string[];
+  signals: KeywordTrendSignal[];
+  failedKeywordCount: number;
+  endpointHealthy: boolean;
+}): string {
+  const lines: string[] = ["# Google Trends keyword watch", ""];
+
+  if (!result.endpointHealthy) {
+    lines.push(
+      `> ⚠️ **The Google Trends endpoint looks broken** — ${result.failedKeywordCount}/${result.checkedKeywords.length} keyword lookup(s) failed. ` +
+        "This is an undocumented endpoint that can change shape without notice (see README). Results below may be incomplete.",
+      ""
+    );
+  }
+
+  lines.push(`Checked ${result.checkedKeywords.length} keyword(s): ${result.checkedKeywords.join(", ")}`, "");
 
   if (result.signals.length === 0) {
     lines.push("_No keyword cleared the spike threshold this check._");

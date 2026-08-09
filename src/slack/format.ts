@@ -200,11 +200,24 @@ function coreWebVitalsBlocks(vitals: CoreWebVitals[]): SlackBlock[] {
  * the main GapReport (no site crawl involved), posted on its own schedule
  * rather than as a section of formatReportBlocks.
  */
-export function formatTrendWatchBlocks(result: { checkedKeywords: string[]; signals: KeywordTrendSignal[] }): SlackBlock[] {
-  const blocks: SlackBlock[] = [
-    header("Google Trends keyword watch"),
-    context(`Checked ${result.checkedKeywords.length} keyword(s): ${result.checkedKeywords.join(", ")}`),
-  ];
+export function formatTrendWatchBlocks(result: {
+  checkedKeywords: string[];
+  signals: KeywordTrendSignal[];
+  failedKeywordCount: number;
+  endpointHealthy: boolean;
+}): SlackBlock[] {
+  const blocks: SlackBlock[] = [header("Google Trends keyword watch")];
+
+  if (!result.endpointHealthy) {
+    blocks.push(
+      section(
+        `⚠️ *The Google Trends endpoint looks broken* — ${result.failedKeywordCount}/${result.checkedKeywords.length} keyword lookup(s) failed. ` +
+          "This is an undocumented endpoint that can change shape without notice. Results may be incomplete."
+      )
+    );
+  }
+
+  blocks.push(context(`Checked ${result.checkedKeywords.length} keyword(s): ${result.checkedKeywords.join(", ")}`));
 
   if (result.signals.length === 0) {
     blocks.push(divider(), section("No keyword cleared the spike threshold this check."));

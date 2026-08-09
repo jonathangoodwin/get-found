@@ -169,6 +169,15 @@ any real workload risks 429s, which is why every keyword lookup fails soft
 "signals" when its most recent window of interest is at least
 `--threshold`% above its own baseline.
 
+Because a broken endpoint and "nothing is spiking" both look like "no
+signals" from the outside, get-found tracks the difference: an isolated
+keyword failure (rate limiting) is normal and ignored, but if the session
+cookie warm-up fails or every single keyword lookup fails, the whole
+result is flagged `endpointHealthy: false` — a maintenance signal, not a
+spike. The CLI prints a warning to stderr and exits non-zero (so a cron
+wrapper can alert on it); the Slack post gets a `⚠️` banner and an altered
+fallback/notification text instead of quietly reporting nothing found.
+
 ```bash
 npm run dev -- trends-watch --themes "memory care, assisted living" \
   --geo US --threshold 50 --timeframe-days 90

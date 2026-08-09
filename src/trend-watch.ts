@@ -22,6 +22,18 @@ export interface TrendWatchResult {
   checkedKeywords: string[];
   /** Keywords whose recent interest cleared the threshold, highest delta first. */
   signals: KeywordTrendSignal[];
+  /** How many of checkedKeywords came back with no data — a fetch/parse failure, not "genuinely zero volume" (see endpointHealthy). */
+  failedKeywordCount: number;
+  /**
+   * False when the Trends endpoint itself looks broken this run, not just a
+   * quiet keyword: the session cookie warm-up failed, or every single
+   * keyword lookup failed. A few isolated failures among many (rate
+   * limiting) don't trip this — only a wholesale failure does, since this
+   * endpoint is undocumented and can change shape without notice (see
+   * README). Callers should alert loudly on false rather than silently
+   * reporting "no signals found".
+   */
+  endpointHealthy: boolean;
 }
 
 const DEFAULT_THRESHOLD_PERCENT = 50;
@@ -46,14 +58,23 @@ export async function runTrendWatch(opts: TrendWatchOptions): Promise<TrendWatch
 
   log(`Checking ${checkedKeywords.length} keyword(s) against Google Trends (${geo})...`);
   const cookie = await warmTrendsSession(geo);
+  if (!cookie) {
+    log("Warning: no session cookie from Google Trends — the endpoint may have changed. Every lookup below will likely fail.");
+  }
 
   const signals: KeywordTrendSignal[] = [];
+  let failedKeywordCount = 0;
   for (const [index, keyword] of checkedKeywords.entries()) {
     if (index > 0 && opts.requestDelayMs !== 0) {
       await sleep(opts.requestDelayMs ?? DEFAULT_REQUEST_DELAY_MS);
     }
 
     const points = await fetchInterestOverTime(keyword, cookie, { geo, timeframeDays: opts.timeframeDays });
+    if (points.length === 0) {
+      failedKeywordCount++;
+      continue;
+    }
+
     const delta = computeInterestDelta(points);
     if (delta && delta.deltaPercent >= threshold) {
       signals.push({
@@ -66,8 +87,14 @@ export async function runTrendWatch(opts: TrendWatchOptions): Promise<TrendWatch
     }
   }
 
+  const allFailed = checkedKeywords.length > 0 && failedKeywordCount === checkedKeywords.length;
+  const endpointHealthy = Boolean(cookie) && !allFailed;
+  if (!endpointHealthy) {
+    log(`Warning: Google Trends endpoint appears broken (${failedKeywordCount}/${checkedKeywords.length} lookups failed).`);
+  }
+
   signals.sort((a, b) => b.deltaPercent - a.deltaPercent);
-  return { checkedKeywords, signals };
+  return { checkedKeywords, signals, failedKeywordCount, endpointHealthy };
 }
 
 interface ExpanderHandle {

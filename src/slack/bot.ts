@@ -114,7 +114,10 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
         deltaThresholdPercent: config.trendWatchThresholdPercent,
       });
       await configStore.save({ ...(await configStore.load()), trendWatchLastRunAt: new Date().toISOString() });
-      await postBlocks(channelId, "Google Trends keyword watch", formatTrendWatchBlocks(result));
+      const fallbackText = result.endpointHealthy
+        ? "Google Trends keyword watch"
+        : "⚠️ Google Trends keyword watch — the endpoint looks broken";
+      await postBlocks(channelId, fallbackText, formatTrendWatchBlocks(result));
     } catch (err) {
       await app.client.chat.postMessage({
         channel: channelId,

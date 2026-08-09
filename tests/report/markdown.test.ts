@@ -303,7 +303,12 @@ describe("renderMarkdownReport — outreach drafts", () => {
 
 describe("renderTrendWatchReport", () => {
   it("lists the checked keywords and notes when nothing cleared the threshold", () => {
-    const markdown = renderTrendWatchReport({ checkedKeywords: ["memory care", "memory care pricing"], signals: [] });
+    const markdown = renderTrendWatchReport({
+      checkedKeywords: ["memory care", "memory care pricing"],
+      signals: [],
+      failedKeywordCount: 0,
+      endpointHealthy: true,
+    });
     expect(markdown).toContain("# Google Trends keyword watch");
     expect(markdown).toContain("Checked 2 keyword(s): memory care, memory care pricing");
     expect(markdown).toContain("_No keyword cleared the spike threshold this check._");
@@ -313,8 +318,31 @@ describe("renderTrendWatchReport", () => {
     const markdown = renderTrendWatchReport({
       checkedKeywords: ["memory care"],
       signals: [{ keyword: "memory care", baselineInterest: 10, recentInterest: 40, deltaPercent: 300, points: [] }],
+      failedKeywordCount: 0,
+      endpointHealthy: true,
     });
     expect(markdown).toContain("| Keyword | Baseline interest | Recent interest | Change |");
     expect(markdown).toContain("| memory care | 10.0 | 40.0 | +300% |");
+  });
+
+  it("omits the broken-endpoint warning when healthy", () => {
+    const markdown = renderTrendWatchReport({
+      checkedKeywords: ["memory care"],
+      signals: [],
+      failedKeywordCount: 0,
+      endpointHealthy: true,
+    });
+    expect(markdown).not.toContain("endpoint looks broken");
+  });
+
+  it("includes a broken-endpoint warning with the failure count when unhealthy", () => {
+    const markdown = renderTrendWatchReport({
+      checkedKeywords: ["memory care", "assisted living"],
+      signals: [],
+      failedKeywordCount: 2,
+      endpointHealthy: false,
+    });
+    expect(markdown).toContain("⚠️ **The Google Trends endpoint looks broken**");
+    expect(markdown).toContain("2/2 keyword lookup(s) failed");
   });
 });

@@ -223,14 +223,24 @@ describe("formatReportBlocks — trending now", () => {
 
 describe("formatTrendWatchBlocks", () => {
   it("headers with the checked keyword count", () => {
-    const blocks = formatTrendWatchBlocks({ checkedKeywords: ["memory care", "memory care pricing"], signals: [] });
+    const blocks = formatTrendWatchBlocks({
+      checkedKeywords: ["memory care", "memory care pricing"],
+      signals: [],
+      failedKeywordCount: 0,
+      endpointHealthy: true,
+    });
     expect(blocks[0]).toMatchObject({ type: "header" });
     expect(textOf(blocks)).toContain("Google Trends keyword watch");
     expect(textOf(blocks)).toContain("memory care, memory care pricing");
   });
 
   it("notes when no keyword cleared the threshold", () => {
-    const blocks = formatTrendWatchBlocks({ checkedKeywords: ["memory care"], signals: [] });
+    const blocks = formatTrendWatchBlocks({
+      checkedKeywords: ["memory care"],
+      signals: [],
+      failedKeywordCount: 0,
+      endpointHealthy: true,
+    });
     expect(textOf(blocks)).toContain("No keyword cleared the spike threshold");
   });
 
@@ -238,10 +248,34 @@ describe("formatTrendWatchBlocks", () => {
     const blocks = formatTrendWatchBlocks({
       checkedKeywords: ["memory care"],
       signals: [{ keyword: "memory care", baselineInterest: 10, recentInterest: 40, deltaPercent: 300, points: [] }],
+      failedKeywordCount: 0,
+      endpointHealthy: true,
     });
     const text = textOf(blocks);
     expect(text).toContain("Spiking now");
     expect(text).toContain("memory care");
     expect(text).toContain("10 → 40 (+300%)");
+  });
+
+  it("omits the broken-endpoint warning when healthy", () => {
+    const blocks = formatTrendWatchBlocks({
+      checkedKeywords: ["memory care"],
+      signals: [],
+      failedKeywordCount: 0,
+      endpointHealthy: true,
+    });
+    expect(textOf(blocks)).not.toContain("endpoint looks broken");
+  });
+
+  it("includes a broken-endpoint warning with the failure count when unhealthy", () => {
+    const blocks = formatTrendWatchBlocks({
+      checkedKeywords: ["memory care", "assisted living"],
+      signals: [],
+      failedKeywordCount: 2,
+      endpointHealthy: false,
+    });
+    const text = textOf(blocks);
+    expect(text).toContain("The Google Trends endpoint looks broken");
+    expect(text).toContain("2/2 keyword lookup(s) failed");
   });
 });

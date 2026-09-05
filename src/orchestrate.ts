@@ -13,12 +13,14 @@ import {
   computeStrikingDistance,
 } from "./gap-engine/gap.js";
 import { matchTrendSignals } from "./gap-engine/trends.js";
+import { diagnoseBrokenLinks } from "./health/broken-link-diagnosis.js";
 import { runHealthChecks } from "./health/checks.js";
 import { diffReports, type SnapshotDiff } from "./history/diff.js";
 import { DEFAULT_HISTORY_DIR, FileHistoryStore } from "./history/store.js";
 import { ClaudeBriefDrafter, RuleBasedBriefDrafter, type BriefDrafter } from "./ai/brief.js";
 import { ClaudeOutreachDrafter, RuleBasedOutreachDrafter, type OutreachDrafter } from "./ai/outreach.js";
 import type {
+  BrokenLinkDiagnosis,
   ContactChannel,
   ContentBrief,
   CoreWebVitals,
@@ -69,6 +71,8 @@ export interface RunResult {
   outreachDrafts: Map<string, OutreachDraft>;
   /** Tracked topics currently matching a Google trending search, newest/highest-traffic first. */
   trendSignals: TrendSignal[];
+  /** Each broken URL classified by whether a live page actually links to it, plus a suggested replacement. */
+  brokenLinkDiagnoses: BrokenLinkDiagnosis[];
 }
 
 /**
@@ -97,6 +101,7 @@ export async function runAnalysis(opts: RunOptions): Promise<RunResult> {
   const healthFindings: HealthFinding[] = runHealthChecks(ownSite, {
     thinContentWordCount: opts.thinContentWordCount ?? 300,
   });
+  const brokenLinkDiagnoses = diagnoseBrokenLinks(ownSite);
 
   let strikingDistance: Opportunity[] = [];
   let rankingWatch: Opportunity[] = [];
@@ -205,7 +210,7 @@ export async function runAnalysis(opts: RunOptions): Promise<RunResult> {
     log,
   });
 
-  return { report, diff, healthFindings, sitemapStatuses, coreWebVitals, briefs, contacts, outreachDrafts, trendSignals };
+  return { report, diff, healthFindings, sitemapStatuses, coreWebVitals, briefs, contacts, outreachDrafts, trendSignals, brokenLinkDiagnoses };
 }
 
 function dedupeTopics(topics: string[]): string[] {

@@ -37,6 +37,49 @@ describe("parsePageHtml", () => {
     expect(page.hasSchema).toBe(false);
     expect(page.h1).toEqual([]);
     expect(page.wordCount).toBe(0);
+    expect(page.internalLinks).toEqual([]);
+  });
+
+  it("collects same-domain links, resolving relative hrefs to absolute URLs", () => {
+    const html = `<html><body>
+      <a href="/blog/post-1">Post 1</a>
+      <a href="https://example.com/blog/post-2">Post 2</a>
+      <a href="other-page">Relative</a>
+    </body></html>`;
+    const page = parsePageHtml("https://example.com/blog/", "example.com", html);
+    expect(page.internalLinks.sort()).toEqual([
+      "https://example.com/blog/other-page",
+      "https://example.com/blog/post-1",
+      "https://example.com/blog/post-2",
+    ]);
+  });
+
+  it("treats www and bare domain as the same site", () => {
+    const html = `<a href="https://www.example.com/page">link</a>`;
+    const page = parsePageHtml("https://example.com/", "example.com", html);
+    expect(page.internalLinks).toEqual(["https://www.example.com/page"]);
+  });
+
+  it("excludes external domains, mailto/tel/javascript hrefs, and hash-only anchors", () => {
+    const html = `<html><body>
+      <a href="https://other-site.com/page">external</a>
+      <a href="mailto:hi@example.com">email</a>
+      <a href="tel:+15551234567">phone</a>
+      <a href="javascript:void(0)">js</a>
+      <a href="#section">anchor</a>
+    </body></html>`;
+    const page = parsePageHtml("https://example.com/", "example.com", html);
+    expect(page.internalLinks).toEqual([]);
+  });
+
+  it("strips the hash fragment and dedupes links to the same URL", () => {
+    const html = `<html><body>
+      <a href="/page">a</a>
+      <a href="/page#section-1">b</a>
+      <a href="/page#section-2">c</a>
+    </body></html>`;
+    const page = parsePageHtml("https://example.com/", "example.com", html);
+    expect(page.internalLinks).toEqual(["https://example.com/page"]);
   });
 });
 

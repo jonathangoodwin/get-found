@@ -15,6 +15,8 @@ export interface PageRecord {
   canonicalUrl: string | null;
   hasSchema: boolean;
   isNoindex: boolean;
+  /** Absolute, same-domain <a href> URLs found on this page — used to tell a stale sitemap entry apart from a link a real visitor could click. */
+  internalLinks: string[];
   fetchedAt: string; // ISO timestamp
 }
 
@@ -182,4 +184,20 @@ export interface KeywordTrendSignal {
   recentInterest: number;
   deltaPercent: number;
   points: InterestPoint[];
+}
+
+/**
+ * A broken (failed-to-fetch) URL, classified by real-world exposure and
+ * paired with a best-guess live replacement. Every failedUrl comes from the
+ * sitemap by construction (that's the crawler's URL universe) — what this
+ * adds is whether a real visitor could actually click their way to it via a
+ * live page, which is the difference between "stale sitemap entry, low
+ * urgency" and "an actual broken link on the site".
+ */
+export interface BrokenLinkDiagnosis {
+  url: string;
+  /** Live, successfully-crawled pages whose HTML links to this dead URL. Empty means it's sitemap-only — no real click path to it. */
+  linkedFromPages: string[];
+  /** Best-guess live replacement on the same site, matched by title/slug similarity — null if nothing cleared the confidence threshold. */
+  suggestedReplacement: string | null;
 }

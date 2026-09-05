@@ -145,6 +145,7 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
         coreWebVitals: result.coreWebVitals,
         contacts: result.contacts,
         trendSignals: result.trendSignals,
+        brokenLinkDiagnoses: result.brokenLinkDiagnoses,
       });
       await postBlocks(channelId, `SEO report for ${config.site}`, blocks);
     } catch (err) {
@@ -195,6 +196,7 @@ export function createSlackBot(opts: SlackBotOptions): SlackBot {
             coreWebVitals: result.coreWebVitals,
             contacts: result.contacts,
             trendSignals: result.trendSignals,
+            brokenLinkDiagnoses: result.brokenLinkDiagnoses,
           },
           config.dailyReportSections
         );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatReportBlocks, formatTrendWatchBlocks } from "../../src/slack/format.js";
 import type { SnapshotDiff } from "../../src/history/diff.js";
-import type { ContactChannel, CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../../src/types.js";
+import type { BrokenLinkDiagnosis, ContactChannel, CoreWebVitals, GapReport, HealthFinding, Opportunity, SitemapStatus } from "../../src/types.js";
 
 function opportunity(overrides: Partial<Opportunity> = {}): Opportunity {
   return {
@@ -111,6 +111,22 @@ describe("formatReportBlocks", () => {
   it("says no issues found for an empty health findings list", () => {
     const blocks = formatReportBlocks({ report: report(), healthFindings: [] });
     expect(textOf(blocks)).toContain("No issues found.");
+  });
+
+  it("omits the broken-link diagnosis block when none are passed or the list is empty", () => {
+    expect(textOf(formatReportBlocks({ report: report() }))).not.toContain("Broken link diagnosis");
+    expect(textOf(formatReportBlocks({ report: report(), brokenLinkDiagnoses: [] }))).not.toContain("Broken link diagnosis");
+  });
+
+  it("summarizes how many broken links are actually linked from a live page", () => {
+    const diagnoses: BrokenLinkDiagnosis[] = [
+      { url: "https://ours.com/dead-1", linkedFromPages: ["https://ours.com/blog"], suggestedReplacement: "https://ours.com/live" },
+      { url: "https://ours.com/dead-2", linkedFromPages: [], suggestedReplacement: null },
+    ];
+    const text = textOf(formatReportBlocks({ report: report(), brokenLinkDiagnoses: diagnoses }));
+    expect(text).toContain("Broken link diagnosis");
+    expect(text).toContain("1 of 2 broken link(s) are actually linked from a live page");
+    expect(text).toContain("1 have a suggested replacement");
   });
 
   it("summarizes sitemap warnings and errors across sitemaps", () => {

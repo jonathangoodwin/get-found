@@ -1,5 +1,6 @@
 import type { SnapshotDiff } from "../history/diff.js";
 import type {
+  BrokenLinkDiagnosis,
   ContactChannel,
   ContentBrief,
   CoreWebVitals,
@@ -21,10 +22,12 @@ export interface RenderReportOptions {
   contacts?: Map<string, ContactChannel>;
   outreachDrafts?: Map<string, OutreachDraft>;
   trendSignals?: TrendSignal[];
+  brokenLinkDiagnoses?: BrokenLinkDiagnosis[];
 }
 
 export function renderMarkdownReport(report: GapReport, options: RenderReportOptions = {}): string {
-  const { briefs, diff, healthFindings, sitemapStatuses, coreWebVitals, contacts, outreachDrafts, trendSignals } = options;
+  const { briefs, diff, healthFindings, sitemapStatuses, coreWebVitals, contacts, outreachDrafts, trendSignals, brokenLinkDiagnoses } =
+    options;
 
   const gapOpportunities = report.opportunities.filter((o) => o.kind === "content-gap");
   const strikingDistance = report.opportunities.filter((o) => o.kind === "striking-distance");
@@ -76,6 +79,10 @@ export function renderMarkdownReport(report: GapReport, options: RenderReportOpt
 
   if (healthFindings) {
     lines.push(renderHealthSection(healthFindings), "");
+  }
+
+  if (brokenLinkDiagnoses && brokenLinkDiagnoses.length > 0) {
+    lines.push(renderBrokenLinkDiagnosisSection(brokenLinkDiagnoses), "");
   }
 
   if (sitemapStatuses) {
@@ -295,6 +302,65 @@ function renderHealthSection(findings: HealthFinding[]): string {
   }
 
   return lines.join("\n").trimEnd();
+}
+
+const MAX_ORPHANED_LISTED = 15;
+
+function renderBrokenLinkDiagnosisSection(diagnoses: BrokenLinkDiagnosis[]): string {
+  const linked = diagnoses.filter((d) => d.linkedFromPages.length > 0);
+  const orphaned = diagnoses.filter((d) => d.linkedFromPages.length === 0);
+
+  const lines = [
+    "## Broken link diagnosis",
+    "",
+    `${linked.length} of ${diagnoses.length} broken URL(s) are actually linked from a live page — a real visitor could click into these. ` +
+      `The other ${orphaned.length} are stale sitemap entries with no live click path (lower urgency: fix by pruning/regenerating the sitemap, not the pages).`,
+    "",
+  ];
+
+  if (linked.length > 0) {
+    lines.push(
+      "**Linked from a live page — fix these first:**",
+      "",
+      "| Broken URL | Linked from | Suggested replacement |",
+      "|---|---|---|"
+    );
+    for (const d of linked) {
+      const from = d.linkedFromPages.length > 2 ? `${d.linkedFromPages.slice(0, 2).join(", ")}, +${d.linkedFromPages.length - 2} more` : d.linkedFromPages.join(", ");
+      lines.push(`| ${d.url} | ${from} | ${d.suggestedReplacement ?? "_no confident match_"} |`);
+    }
+    lines.push("");
+  }
+
+  if (orphaned.length > 0) {
+    lines.push("**Sitemap-only (no live page links to these):**", "");
+    for (const d of orphaned.slice(0, MAX_ORPHANED_LISTED)) {
+      lines.push(`- ${d.url}${d.suggestedReplacement ? ` — possible replacement: ${d.suggestedReplacement}` : ""}`);
+    }
+    if (orphaned.length > MAX_ORPHANED_LISTED) {
+      lines.push(`- _...and ${orphaned.length - MAX_ORPHANED_LISTED} more_`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+/**
+ * A redirect map for the entries with a confident suggested replacement —
+ * the deliverable someone with CMS/hosting access actually pastes into a
+ * redirect manager (Yoast/RankMath's redirect tool, an .htaccess/nginx
+ * rule, etc.). get-found never applies this itself — see the outreach
+ * drafts' same draft-only rationale.
+ */
+export function renderRedirectMapCsv(diagnoses: BrokenLinkDiagnosis[]): string {
+  const rows = diagnoses.filter((d) => d.suggestedReplacement !== null);
+  const lines = ["old_url,new_url", ...rows.map((d) => `${csvField(d.url)},${csvField(d.suggestedReplacement!)}`)];
+  return lines.join("\n");
+}
+
+function csvField(value: string): string {
+  return value.includes(",") ? `"${value}"` : value;
 }
 
 function renderSitemapSection(statuses: SitemapStatus[]): string {

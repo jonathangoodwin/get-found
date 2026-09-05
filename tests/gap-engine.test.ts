@@ -22,6 +22,7 @@ function page(overrides: Partial<PageRecord>): PageRecord {
     canonicalUrl: null,
     hasSchema: false,
     isNoindex: false,
+    internalLinks: [],
     fetchedAt: "2026-08-01T00:00:00.000Z",
     ...overrides,
   };

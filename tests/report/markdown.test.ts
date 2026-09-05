@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { renderMarkdownReport, renderTrendWatchReport } from "../../src/report/markdown.js";
+import { renderMarkdownReport, renderRedirectMapCsv, renderTrendWatchReport } from "../../src/report/markdown.js";
 import type { SnapshotDiff } from "../../src/history/diff.js";
 import type {
+  BrokenLinkDiagnosis,
   ContactChannel,
   CoreWebVitals,
   GapReport,
@@ -125,6 +126,51 @@ describe("renderMarkdownReport — site health", () => {
     }));
     const markdown = renderMarkdownReport(report(), { healthFindings: findings });
     expect(markdown).toContain("_...and 5 more_");
+  });
+});
+
+describe("renderMarkdownReport — broken link diagnosis", () => {
+  it("omits the section when brokenLinkDiagnoses is not passed or empty", () => {
+    expect(renderMarkdownReport(report())).not.toContain("## Broken link diagnosis");
+    expect(renderMarkdownReport(report(), { brokenLinkDiagnoses: [] })).not.toContain("## Broken link diagnosis");
+  });
+
+  it("separates links that are actually linked from a live page from stale sitemap-only entries", () => {
+    const diagnoses: BrokenLinkDiagnosis[] = [
+      { url: "https://ours.com/dead-1", linkedFromPages: ["https://ours.com/blog"], suggestedReplacement: "https://ours.com/live" },
+      { url: "https://ours.com/dead-2", linkedFromPages: [], suggestedReplacement: null },
+    ];
+    const markdown = renderMarkdownReport(report(), { brokenLinkDiagnoses: diagnoses });
+
+    expect(markdown).toContain("## Broken link diagnosis");
+    expect(markdown).toContain("1 of 2 broken URL(s) are actually linked from a live page");
+    expect(markdown).toContain("| https://ours.com/dead-1 | https://ours.com/blog | https://ours.com/live |");
+    expect(markdown).toContain("**Sitemap-only (no live page links to these):**");
+    expect(markdown).toContain("- https://ours.com/dead-2");
+  });
+
+  it("shows 'no confident match' when a linked dead URL has no suggested replacement", () => {
+    const diagnoses: BrokenLinkDiagnosis[] = [
+      { url: "https://ours.com/dead", linkedFromPages: ["https://ours.com/blog"], suggestedReplacement: null },
+    ];
+    const markdown = renderMarkdownReport(report(), { brokenLinkDiagnoses: diagnoses });
+    expect(markdown).toContain("_no confident match_");
+  });
+});
+
+describe("renderRedirectMapCsv", () => {
+  it("includes only entries with a suggested replacement", () => {
+    const diagnoses: BrokenLinkDiagnosis[] = [
+      { url: "https://ours.com/dead-1", linkedFromPages: [], suggestedReplacement: "https://ours.com/live-1" },
+      { url: "https://ours.com/dead-2", linkedFromPages: [], suggestedReplacement: null },
+    ];
+    const csv = renderRedirectMapCsv(diagnoses);
+    expect(csv).toBe("old_url,new_url\nhttps://ours.com/dead-1,https://ours.com/live-1");
+  });
+
+  it("returns just the header row when nothing has a suggested replacement", () => {
+    const diagnoses: BrokenLinkDiagnosis[] = [{ url: "https://ours.com/dead", linkedFromPages: [], suggestedReplacement: null }];
+    expect(renderRedirectMapCsv(diagnoses)).toBe("old_url,new_url");
   });
 });
 

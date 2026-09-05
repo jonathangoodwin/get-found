@@ -207,6 +207,26 @@ One honest limitation: Search Console's full **Index Coverage** report
 have no public API. "Site health" here means what's structurally checkable
 plus what Google's APIs actually expose — not a mirror of the GSC web UI.
 
+### Broken link diagnosis
+
+Every broken URL get-found finds comes from the sitemap (that's the
+crawler's whole URL universe), but not every one matters the same amount:
+a dead URL with no live page linking to it is a stale sitemap entry — low
+urgency, fixed by pruning/regenerating the sitemap. One that a live page
+actually links to is a real broken link a visitor could click. The
+**Broken link diagnosis** section (part of every `run`, no extra
+configuration) splits them this way, and for each one, suggests a live
+replacement page by matching the dead URL's slug against your site's own
+page titles (the same fuzzy topic matching content-gap detection uses).
+
+`--out-redirects <file>` writes a CSV redirect map (`old_url,new_url`) for
+just the entries with a confident suggested replacement — the deliverable
+someone with CMS/hosting access pastes into a redirect manager (Yoast/
+RankMath's redirect tool, an `.htaccess`/nginx rule, etc.). **get-found
+never applies a redirect itself** — same draft-only boundary as outreach
+messages and content briefs; diagnosing and fixing a live site are
+different levels of trust, and this tool only ever does the former.
+
 ### Run history and "what changed"
 
 Every `run` saves a timestamped snapshot to `.get-found/history/` (one JSON
@@ -286,10 +306,11 @@ npm run build
 
 ## Status
 
-v0.8 — collectors + gap-engine spine, a working CLI, Claude-backed content
+v0.9 — collectors + gap-engine spine, a working CLI, Claude-backed content
 briefs, a DataForSEO keyword-volume adapter, a GSC OAuth setup script, a
 file-based history/diff layer, fuzzy topic matching, a broadened standard
-crawl (site health, GSC Sitemaps status, Core Web Vitals, page-1-inclusive
+crawl (site health, broken-link diagnosis with suggested-replacement
+redirect maps, GSC Sitemaps status, Core Web Vitals, page-1-inclusive
 ranking watch), a Slack integration (`src/slack/`, Socket Mode) with
 `/run`, `/latest`, `/config`, and a configurable daily report, an opt-in
 link-gap / backlink builder (`--link-gap`) with publicly-published contact

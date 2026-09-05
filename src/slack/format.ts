@@ -1,5 +1,6 @@
 import type { SnapshotDiff } from "../history/diff.js";
 import type {
+  BrokenLinkDiagnosis,
   ContactChannel,
   CoreWebVitals,
   GapReport,
@@ -30,6 +31,7 @@ export interface ReportBlocksInput {
   coreWebVitals?: CoreWebVitals[];
   contacts?: Map<string, ContactChannel>;
   trendSignals?: TrendSignal[];
+  brokenLinkDiagnoses?: BrokenLinkDiagnosis[];
 }
 
 const TOP_N = 5;
@@ -98,6 +100,10 @@ export function formatReportBlocks(input: ReportBlocksInput, sections?: ReportSe
 
   if (include("site-health") && input.healthFindings) {
     blocks.push(...healthBlocks(input.healthFindings));
+  }
+
+  if (include("site-health") && input.brokenLinkDiagnoses && input.brokenLinkDiagnoses.length > 0) {
+    blocks.push(...brokenLinkDiagnosisBlocks(input.brokenLinkDiagnoses));
   }
 
   if (include("sitemap") && input.sitemapStatuses) {
@@ -173,6 +179,18 @@ function healthBlocks(findings: HealthFinding[]): SlackBlock[] {
   const lines = [...counts.entries()].map(([type, count]) => `• ${type.replace(/-/g, " ")}: ${count}`);
 
   return [divider(), section(`*Site health* (${findings.length} issue${findings.length === 1 ? "" : "s"})\n${lines.join("\n")}`)];
+}
+
+function brokenLinkDiagnosisBlocks(diagnoses: BrokenLinkDiagnosis[]): SlackBlock[] {
+  const linked = diagnoses.filter((d) => d.linkedFromPages.length > 0);
+  const withSuggestion = diagnoses.filter((d) => d.suggestedReplacement !== null);
+
+  const text =
+    `*Broken link diagnosis*\n` +
+    `${linked.length} of ${diagnoses.length} broken link(s) are actually linked from a live page (fix these first) — ` +
+    `the rest are stale sitemap entries. ${withSuggestion.length} have a suggested replacement.`;
+
+  return [divider(), section(text)];
 }
 
 function sitemapBlocks(statuses: SitemapStatus[]): SlackBlock[] {

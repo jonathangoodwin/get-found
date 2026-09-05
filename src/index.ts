@@ -12,6 +12,7 @@ export * from "./gap-engine/topics.js";
 export * from "./gap-engine/trends.js";
 export * from "./gap-engine/keyword-trends.js";
 export * from "./health/checks.js";
+export * from "./health/broken-link-diagnosis.js";
 export * from "./history/store.js";
 export * from "./history/diff.js";
 export * from "./report/markdown.js";

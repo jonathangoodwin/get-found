@@ -4,7 +4,7 @@ import { writeFile } from "node:fs/promises";
 import { Command } from "commander";
 import { DEFAULT_HISTORY_DIR } from "./history/store.js";
 import { runAnalysis } from "./orchestrate.js";
-import { renderMarkdownReport, renderTrendWatchReport } from "./report/markdown.js";
+import { renderMarkdownReport, renderRedirectMapCsv, renderTrendWatchReport } from "./report/markdown.js";
 import { createSlackBot } from "./slack/bot.js";
 import { DEFAULT_CONFIG_PATH, FileConfigStore } from "./slack/config.js";
 import { runTrendWatch } from "./trend-watch.js";
@@ -40,6 +40,10 @@ program
   )
   .option("--trends-geo <code>", "region code for the trending-searches feed", "US")
   .option("--trends-topics <topics>", "comma-separated extra topics to watch, beyond this run's opportunities", "")
+  .option(
+    "--out-redirects <file>",
+    "write a CSV redirect map (old_url,new_url) for broken links with a confident suggested replacement"
+  )
   .action(async (opts) => {
     const competitors: string[] = opts.competitors
       ? opts.competitors.split(",").map((d: string) => d.trim()).filter(Boolean)
@@ -76,6 +80,7 @@ program
       contacts: result.contacts,
       outreachDrafts: result.outreachDrafts,
       trendSignals: result.trendSignals,
+      brokenLinkDiagnoses: result.brokenLinkDiagnoses,
     });
 
     if (opts.out) {
@@ -83,6 +88,16 @@ program
       console.error(`Report written to ${opts.out}`);
     } else {
       console.log(markdown);
+    }
+
+    if (opts.outRedirects) {
+      const withSuggestion = result.brokenLinkDiagnoses.filter((d) => d.suggestedReplacement !== null);
+      if (withSuggestion.length === 0) {
+        console.error("No broken links had a confident suggested replacement — skipping redirect map.");
+      } else {
+        await writeFile(opts.outRedirects, renderRedirectMapCsv(result.brokenLinkDiagnoses), "utf-8");
+        console.error(`Redirect map (${withSuggestion.length} row(s)) written to ${opts.outRedirects}`);
+      }
     }
   });
 

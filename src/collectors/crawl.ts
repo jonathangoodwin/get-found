@@ -70,6 +70,7 @@ export function parsePageHtml(url: string, domain: string, html: string): PageRe
   const h1 = collectHeadings($, "h1");
   const h2 = collectHeadings($, "h2");
   const h3 = collectHeadings($, "h3");
+  const internalLinks = collectInternalLinks($, url, domain);
 
   const bodyText = $("body").text().replace(/\s+/g, " ").trim();
   const wordCount = bodyText ? bodyText.split(" ").length : 0;
@@ -86,8 +87,36 @@ export function parsePageHtml(url: string, domain: string, html: string): PageRe
     canonicalUrl,
     hasSchema,
     isNoindex,
+    internalLinks,
     fetchedAt: new Date().toISOString(),
   };
+}
+
+/** Absolute, same-domain <a href> targets — resolves relative links, skips mailto/tel/javascript/anchor-only hrefs, dedupes. */
+function collectInternalLinks($: cheerio.CheerioAPI, pageUrl: string, domain: string): string[] {
+  const hrefs = $("a[href]")
+    .map((_, el) => $(el).attr("href"))
+    .get();
+
+  const normalizedDomain = normalizeHost(domain);
+  const resolved = new Set<string>();
+  for (const href of hrefs) {
+    if (!href || href.startsWith("#")) continue;
+    try {
+      const target = new URL(href, pageUrl);
+      if (normalizeHost(target.hostname) === normalizedDomain) {
+        target.hash = "";
+        resolved.add(target.toString());
+      }
+    } catch {
+      // malformed or non-HTTP href (mailto:, tel:, javascript:) — not a page link
+    }
+  }
+  return [...resolved];
+}
+
+function normalizeHost(host: string): string {
+  return host.replace(/^www\./, "");
 }
 
 function collectHeadings($: cheerio.CheerioAPI, selector: string): string[] {
